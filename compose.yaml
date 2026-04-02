@@ -1,0 +1,61 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: unlockr-postgres
+    environment:
+      POSTGRES_DB: unlockr
+      POSTGRES_USER: unlockr
+      POSTGRES_PASSWORD: unlockr
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U unlockr -d unlockr"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: unlockr-redis
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
+  minio:
+    image: minio/minio:latest
+    container_name: unlockr-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: unlockr
+      MINIO_ROOT_PASSWORD: unlockr-local-secret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+
+  createbuckets:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_started
+    restart: "no"
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 unlockr unlockr-local-secret; do sleep 1; done &&
+      mc mb --ignore-existing local/unlockr-local
+      "
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:

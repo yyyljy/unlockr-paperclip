@@ -1,0 +1,2 @@
+ALTER TABLE "analysis_sessions" ADD COLUMN "retried_from_analysis_session_id" uuid;--> statement-breakpoint
+ALTER TABLE "analysis_sessions" ADD CONSTRAINT "analysis_sessions_retried_from_analysis_session_id_analysis_sessions_id_fk" FOREIGN KEY ("retried_from_analysis_session_id") REFERENCES "public"."analysis_sessions"("id") ON DELETE set null ON UPDATE no action;
