@@ -28,6 +28,23 @@ cp .env.example .env.local
 docker compose up -d
 ```
 
+If `5432`, `6379`, `9000`, or `9001` are already in use on your machine, start
+an isolated stack with a dedicated compose project and alternate host ports
+instead:
+
+```bash
+COMPOSE_PROJECT_NAME=unlockr-local \
+POSTGRES_PORT=55432 \
+REDIS_PORT=56379 \
+S3_API_PORT=59000 \
+S3_CONSOLE_PORT=59001 \
+docker compose up -d
+```
+
+When you use alternate ports, update `.env.local` so `DATABASE_URL`,
+`REDIS_URL`, and `S3_ENDPOINT` point at the same host ports before you run the
+database commands, the worker, or the app.
+
 3. Install dependencies and generate the initial migration artifacts.
 
 ```bash
@@ -82,13 +99,24 @@ npm run dev
   feedback state without direct database inspection.
 - `parser_failure` should now occur only for real extraction problems such as an
   empty document, unreadable file, or storage/read failure.
+- When `OPENAI_API_KEY`, `OPENAI_RECOMMENDATION_MODEL`, and
+  `OPENAI_RECOMMENDATION_PROMPT_VERSION` are set, a successful session detail
+  page should show a `Model-backed` path badge instead of `Fallback rules`.
+- `npm run verify:model-path` should exit successfully when the OpenAI config is
+  present and the representative fixture reaches the model-backed path.
 
 ## Environment Notes
 
 - `DATABASE_URL`: Postgres system of record for sessions, runs, and outputs
 - `REDIS_URL`: BullMQ backing queue
 - `S3_*`: S3-compatible object storage config; local MinIO is the default
-- `RECOMMENDATION_*`: version metadata recorded on every output contract
+- `RECOMMENDATION_*`: fallback rules-engine metadata recorded on outputs when
+  the model-backed path is unavailable or rejected
+- `OPENAI_API_KEY`, `OPENAI_RECOMMENDATION_MODEL`,
+  `OPENAI_RECOMMENDATION_PROMPT_VERSION`, and `OPENAI_RECOMMENDATION_TIMEOUT_MS`:
+  optional config for the model-backed recommendation adapter
+- `drizzle.config.ts`, the Next.js app, and `scripts/worker.ts` all read
+  `.env.local`, so one local env file now drives the full setup path.
 - The canonical first-launch env matrix now lives in `docs/first-launch-ops.md`.
 
 ## Phase 2 Verification Notes
@@ -115,7 +143,9 @@ npm run dev
 
 - PDF and DOCX extraction quality still depends on document structure and
   whether the source contains real text instead of scanned images.
-- Recommendation generation is deterministic and keyword-based, not LLM-backed.
+- The model-backed path currently supports one OpenAI adapter and falls back to
+  the deterministic rules engine when the model config is missing or the JSON
+  output fails validation.
 - Feedback capture keeps only the latest session-level state; there is no
   historical audit trail or aggregate analytics yet.
 - The operator review page only shows the 25 most recently updated sessions and

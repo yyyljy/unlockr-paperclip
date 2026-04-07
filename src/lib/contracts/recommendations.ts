@@ -11,6 +11,7 @@ const metadataSchema = z.object({
   contractVersion: z.string().min(1),
   taxonomyVersion: z.string().min(1),
   generatedAt: z.string().datetime(),
+  recommendationPath: z.enum(["model_backed", "fallback"]).nullable(),
   parser: z.object({
     provider: z.string().min(1),
     version: z.string().min(1),
@@ -117,6 +118,7 @@ export const sampleAnalysisResult = analysisResultSchema.parse({
     contractVersion: "v1",
     taxonomyVersion: "2026-04-02",
     generatedAt: "2026-04-02T02:00:00.000Z",
+    recommendationPath: "fallback",
     parser: {
       provider: "unlockr.direct-text-intake",
       version: "phase1-intake-v1",

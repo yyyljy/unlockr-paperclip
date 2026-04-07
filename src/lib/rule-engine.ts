@@ -141,6 +141,7 @@ export function buildParserFailureResult(input?: {
       contractVersion: env.RECOMMENDATION_CONTRACT_VERSION,
       taxonomyVersion: env.RECOMMENDATION_TAXONOMY_VERSION,
       generatedAt: now,
+      recommendationPath: null,
       parser:
         input?.parser ?? {
           provider: "unlockr.file-intake",
@@ -173,6 +174,7 @@ export function analyzeResumeInput(input: {
     contractVersion: env.RECOMMENDATION_CONTRACT_VERSION,
     taxonomyVersion: env.RECOMMENDATION_TAXONOMY_VERSION,
     generatedAt: now,
+    recommendationPath: "fallback" as const,
     parser: input.analysisInput.document.parser,
     model: {
       provider: env.RECOMMENDATION_MODEL_PROVIDER,

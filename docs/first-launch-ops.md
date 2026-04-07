@@ -45,9 +45,11 @@ Use [`.env.example`](../.env.example) as the canonical local source. Do not
 copy workspace-specific overrides from [`.env.local`](../.env.local) into a
 shared staging or production template.
 
-All variables below are operationally required by both the web app and the
-worker because `src/lib/env.ts` validates one shared server schema before any
-database, queue, storage, or health-check code runs.
+The base runtime variables below are operationally required by both the web app
+and the worker because `src/lib/env.ts` validates one shared server schema
+before any database, queue, storage, or health-check code runs. The OpenAI
+variables are optional unless you are enabling the model-backed recommendation
+path for launch.
 
 | Variable | Purpose | Local example source | Target first-launch equivalent | Required by |
 | --- | --- | --- | --- | --- |
@@ -66,6 +68,11 @@ database, queue, storage, or health-check code runs.
 | `RECOMMENDATION_MODEL_VERSION` | model or ruleset version recorded on outputs | `.env.example` -> `rules-2026-04-02` | current launch model or ruleset version | both |
 | `RECOMMENDATION_PROMPT_VERSION` | prompt or decision-policy version label | `.env.example` -> `phase1-rules-seed` | current launch prompt or policy version | both |
 | `RECOMMENDATION_TAXONOMY_VERSION` | taxonomy version label written onto outputs | `.env.example` -> `2026-04-02` | current launch taxonomy version label | both |
+| `OPENAI_API_KEY` | secret used by the model-backed recommendation adapter | `.env.example` -> blank | deploy-time OpenAI secret | both when enabled |
+| `OPENAI_BASE_URL` | OpenAI-compatible API base URL | `.env.example` -> `https://api.openai.com/v1` | provider base URL | both when enabled |
+| `OPENAI_RECOMMENDATION_MODEL` | model id used for model-backed recommendations | `.env.example` -> blank | launch model id | both when enabled |
+| `OPENAI_RECOMMENDATION_PROMPT_VERSION` | prompt version label recorded on model-backed outputs | `.env.example` -> `phase2-openai-v1` | launch model prompt label | both when enabled |
+| `OPENAI_RECOMMENDATION_TIMEOUT_MS` | request timeout for the model-backed adapter | `.env.example` -> `20000` | launch timeout budget | both when enabled |
 
 ## First Launch Runbook
 
@@ -147,6 +154,8 @@ surface from Phase 10:
 5. Session detail trust surface
    - open one successful session detail page
    - confirm the candidate profile is visible
+   - confirm the recommendation path badge is `Model-backed` when the OpenAI
+     env is enabled, or `Fallback rules` when it is intentionally disabled
    - confirm recommendation evidence and confidence cues are visible before the
      user would act on the output
 6. Recovery surface

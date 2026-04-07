@@ -4,28 +4,28 @@ import { IntakeForm } from "@/components/intake-form";
 import { sampleAnalysisResult } from "@/lib/contracts/recommendations";
 
 export default function Home() {
-  const foundationCards = [
+  const supportCards = [
     {
-      title: "Database",
+      title: "Who it helps",
       description:
-        "Postgres plus Drizzle migrations for reproducible sessions, runs, recommendation sets, and evidence rows.",
+        "People with real experience who want a clearer read on where their background can grow next.",
     },
     {
-      title: "Storage",
+      title: "What you submit",
       description:
-        "S3-compatible object storage for raw resume files with deterministic storage keys and hash tracking.",
+        "Paste resume or self-introduction text, or upload the original PDF, DOCX, or TXT file.",
     },
     {
-      title: "Queue",
+      title: "What comes back",
       description:
-        "BullMQ on Redis for background parse and recommendation stages, separated from request threads.",
+        "A headline summary, ranked role directions, evidence snippets, risks, and concrete next steps.",
     },
   ];
 
   const trustRails = [
-    "Every recommendation carries evidence snippets.",
-    "Low-confidence and insufficient-evidence states are explicit product outputs.",
-    "Parser and model versions are stored with the contract from day one.",
+    "Trust the direction when the evidence snippets clearly match the roles, tools, and outcomes in the source material.",
+    "Question the result when Unlockr flags thin evidence or asks follow-up questions instead of stretching past the input.",
+    "Retry the source when file extraction fails or when the resume leaves out domain, tool, or ownership detail.",
   ];
   const exampleRecommendation =
     sampleAnalysisResult.status === "ready"
@@ -47,16 +47,16 @@ export default function Home() {
       <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
         <div className="space-y-6">
           <div className="inline-flex rounded-full border border-[color:var(--border)] bg-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-[color:var(--muted-foreground)]">
-            Unlockr • Phase 1 intake
+            Unlockr • Resume direction MVP
           </div>
           <div className="space-y-5">
             <h1 className="max-w-3xl text-5xl font-semibold leading-[1.05] tracking-tight md:text-6xl">
-              Resume intake and recommendation contracts, before the UI gloss.
+              Submit a resume and get evidence-backed career directions.
             </h1>
             <p className="max-w-2xl text-base leading-8 text-[color:var(--muted-foreground)] md:text-lg">
-              This workspace locks the critical trust surface first: uploads and
-              pasted text enter a reproducible analysis pipeline, recommendation
-              outputs stay evidence-grounded, and failure states remain explicit.
+              Unlockr helps people turn existing experience into ranked role
+              directions, evidence-backed fit summaries, and the next actions to
+              strengthen the path that looks most credible.
             </p>
           </div>
 
@@ -76,7 +76,7 @@ export default function Home() {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-3">
-            {foundationCards.map((card) => (
+            {supportCards.map((card) => (
               <article
                 key={card.title}
                 className="rounded-[1.75rem] border border-[color:var(--border)] bg-[color:var(--panel)] p-5"
@@ -91,7 +91,7 @@ export default function Home() {
 
           <div className="rounded-[2rem] border border-[color:var(--border)] bg-white/70 p-6">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-              Trust rails
+              When to trust or question the result
             </p>
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
               {trustRails.map((item) => (
@@ -112,28 +112,28 @@ export default function Home() {
       <section className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
         <article className="rounded-[2rem] border border-[color:var(--border)] bg-[color:var(--panel)] p-6">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-            Product states
+            What the first pass can return
           </p>
           <div className="mt-4 space-y-4 text-sm leading-7">
             <div className="rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 p-4">
-              <p className="font-semibold">Ready</p>
+              <p className="font-semibold">Ready to review</p>
               <p className="mt-1 text-[color:var(--muted-foreground)]">
-                Recommendation objects return evidence, confidence, and concrete
-                next-step guidance.
+                Unlockr found enough evidence to rank role directions and attach
+                concrete next-step guidance.
               </p>
             </div>
             <div className="rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 p-4">
-              <p className="font-semibold">Insufficient evidence</p>
+              <p className="font-semibold">Needs more detail</p>
               <p className="mt-1 text-[color:var(--muted-foreground)]">
-                Weak or overly short inputs return follow-up questions instead of
-                overconfident advice.
+                Thin inputs return follow-up questions instead of overconfident
+                advice.
               </p>
             </div>
             <div className="rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 p-4">
-              <p className="font-semibold">Parser failure</p>
+              <p className="font-semibold">Needs cleaner input</p>
               <p className="mt-1 text-[color:var(--muted-foreground)]">
-                Uploads now parse into shared downstream input; this state is
-                reserved for real extraction failures and unusable files.
+                File uploads that cannot be extracted cleanly stay visible and
+                point to the safest retry path.
               </p>
             </div>
           </div>
@@ -143,9 +143,11 @@ export default function Home() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#dcc8bb]">
-                Recommendation contract preview
+                Trust surface preview
               </p>
-              <h2 className="mt-2 text-2xl font-semibold">`docs/recommendation-contract.md` mirrored in code</h2>
+              <h2 className="mt-2 text-2xl font-semibold">
+                Every result keeps evidence and model context together
+              </h2>
             </div>
             <span className="rounded-full border border-white/15 px-4 py-2 text-xs uppercase tracking-[0.2em] text-[#dcc8bb]">
               v1

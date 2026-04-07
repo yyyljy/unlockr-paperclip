@@ -16,12 +16,13 @@ import {
 } from "@/lib/analysis-sessions";
 import { extractCandidateProfile } from "@/lib/candidate-profile";
 import { analysisQueueName, createRedisConnection } from "@/lib/queues";
+import { generateRecommendationResult } from "@/lib/recommendation-engine";
 import {
   buildDirectTextAnalysisInput,
   buildFileUploadAnalysisInput,
   ResumeParseFailure,
 } from "@/lib/resume-intake";
-import { analyzeResumeInput, buildParserFailureResult } from "@/lib/rule-engine";
+import { buildParserFailureResult } from "@/lib/rule-engine";
 import { downloadResumeObject } from "@/lib/storage";
 
 loadEnvConfig(process.cwd());
@@ -94,7 +95,7 @@ const worker = new Worker(
             status: "analyzing",
           });
 
-          const result = analyzeResumeInput({
+          const result = await generateRecommendationResult({
             analysisInput,
             profile: candidateProfile,
           });
@@ -158,7 +159,7 @@ const worker = new Worker(
         profile: candidateProfile,
       });
 
-      const result = analyzeResumeInput({
+      const result = await generateRecommendationResult({
         analysisInput,
         profile: candidateProfile,
       });

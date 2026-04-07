@@ -1,0 +1,14 @@
+Senior product operations analyst with 6 years in SaaS onboarding, lifecycle programs, and workflow tooling.
+
+Experience
+Led cross-functional onboarding redesign for a B2B software product, mapping customer handoffs, building the weekly launch checklist, and reducing time-to-first-value by 28%.
+Owned retention reporting in SQL and Tableau, tracked activation and SLA trends, and presented weekly recommendations to product, sales, and support leads.
+Built documentation and CRM workflows for renewals, escalation routing, and support handoffs across HubSpot, Zendesk, and internal ops dashboards.
+Partnered with engineering to prioritize API integration fixes that removed duplicate manual steps and saved the operations team 12 hours per week.
+
+Projects
+Created a voice-of-customer review process that tagged support tickets, summarized churn themes, and fed roadmap decisions for onboarding improvements.
+Ran experiment readouts for lifecycle email changes and tied conversion movement back to the onboarding funnel.
+
+Skills
+SQL, Tableau, HubSpot, Zendesk, workflow design, onboarding, retention analysis, stakeholder communication, documentation

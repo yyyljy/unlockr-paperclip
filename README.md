@@ -28,6 +28,7 @@ Open `http://localhost:3000`.
 ```bash
 npm run dev
 npm run worker:dev
+npm run verify:model-path
 npm run check
 npm run build
 npm run db:generate
@@ -40,8 +41,13 @@ npm run db:studio
 - Pasted text and file uploads now flow through a shared normalized analysis path.
 - PDF, DOCX, and TXT uploads persist to object storage, parse in the worker, and
   can reach `ready`, `insufficient_evidence`, or `parser_failure`.
+- When `OPENAI_API_KEY` plus the OpenAI recommendation env vars are configured,
+  the worker attempts a model-backed recommendation pass and safely falls back
+  to the current rules engine on timeout, API failure, or invalid JSON.
 - Session pages surface `ready`, `insufficient_evidence`, and `parser_failure`
   states explicitly.
+- Session detail pages now show whether the output came from the model-backed
+  path or the fallback rules path.
 - `ready` session pages now show summary evidence quality plus per-recommendation
   confidence explanations, evidence gaps, and decision risks before a user
   acts on the output.
@@ -60,3 +66,4 @@ npm run db:studio
 - `docs/incidents.md`
 - `docs/recommendation-contract.md`
 - `docs/mvp-engineering-direction.md`
+- `docs/architecture.md`

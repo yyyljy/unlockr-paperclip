@@ -67,6 +67,7 @@ Every state includes:
 - `contractVersion`
 - `taxonomyVersion`
 - `generatedAt`
+- `recommendationPath`
 - `parser.provider`
 - `parser.version`
 - `parser.mode`
@@ -77,6 +78,12 @@ Every state includes:
 
 `model` may be `null` when no model was used, such as parser-failure
 outputs.
+
+`recommendationPath` should be:
+
+- `model_backed` when the external model produced the accepted result
+- `fallback` when Unlockr fell back to the deterministic rules engine
+- `null` for parser-failure outputs that never reached recommendation generation
 
 ## Evidence Rules
 
@@ -113,8 +120,9 @@ hide it in debug-only surfaces.
 
 ## Phase 1 Notes
 
-- Pasted text and file uploads share the same deterministic recommendation path
-  after normalization.
+- Pasted text and file uploads share the same normalization, profile
+  extraction, and persistence path before recommendation generation splits into
+  model-backed or fallback execution.
 - File uploads should only terminate in `parser_failure` when extraction cannot
   produce usable text.
 - The source-of-truth schema lives in `src/lib/contracts/recommendations.ts`.

@@ -1,7 +1,6 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: unlockr-postgres
     environment:
       POSTGRES_DB: unlockr
       POSTGRES_USER: unlockr
@@ -12,13 +11,12 @@ services:
       timeout: 5s
       retries: 10
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
   redis:
     image: redis:7-alpine
-    container_name: unlockr-redis
     command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -26,20 +24,19 @@ services:
       timeout: 5s
       retries: 10
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis-data:/data
 
   minio:
     image: minio/minio:latest
-    container_name: unlockr-minio
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: unlockr
       MINIO_ROOT_PASSWORD: unlockr-local-secret
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "${S3_API_PORT:-9000}:9000"
+      - "${S3_CONSOLE_PORT:-9001}:9001"
     volumes:
       - minio-data:/data
 

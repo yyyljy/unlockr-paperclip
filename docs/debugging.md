@@ -152,10 +152,29 @@ Check the candidate profile before changing recommendation logic:
 - coverage notes call out missing achievements or weak section detection
 - recommendation evidence lines up with the stored profile evidence
 
+### Sessions keep showing `Fallback rules`
+
+Cause:
+- `OPENAI_API_KEY` is missing
+- `OPENAI_RECOMMENDATION_MODEL` or
+  `OPENAI_RECOMMENDATION_PROMPT_VERSION` is missing
+- the OpenAI request timed out or returned a non-JSON / invalid JSON payload
+- the model picked evidence keys that do not resolve to stored profile evidence
+
+Check:
+- the session detail page badge and debug panel for `Recommendation path`
+- worker logs for `OpenAI recommendation adapter failed`
+- `npm run verify:model-path`
+- `.env.local` contains the OpenAI vars on both the web app and worker process
+
 ## Useful Inspection Points
 
 - `src/lib/analysis-sessions.ts`: queueing, persistence, and session state changes
 - `src/lib/candidate-profile.ts`: profile extraction heuristics and evidence mapping
+- `src/lib/model-backed-recommendations.ts`: OpenAI adapter, JSON validation,
+  and evidence-key resolution
+- `src/lib/recommendation-engine.ts`: model-first orchestration with safe
+  fallback
 - `src/lib/resume-intake.ts`: parsing, section detection, and quality flags
 - `src/lib/rule-engine.ts`: deterministic recommendation logic
 - `src/lib/contracts/recommendations.ts`: user-visible output contract

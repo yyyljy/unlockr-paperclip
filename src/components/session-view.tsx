@@ -26,6 +26,8 @@ type RecommendationConfidenceLabel = Extract<
   { status: "ready" }
 >["recommendations"][number]["confidence"]["label"];
 type RecommendationGapUrgency = Extract<AnalysisResult, { status: "ready" }>["recommendations"][number]["gaps"][number]["urgency"];
+type RecommendationPath = AnalysisResult["metadata"]["recommendationPath"];
+type SessionStatus = SessionSnapshot["session"]["status"];
 
 const recoveryClarificationMaxLength = 4000;
 const recoveryResumeTextMaxLength = 12000;
@@ -87,6 +89,202 @@ function evidenceQualityBadgeClassName(evidenceQuality: ReadyEvidenceQuality) {
       return "border-[color:var(--border)] bg-white/80 text-[color:var(--foreground)]";
     case "thin":
       return "border-[color:var(--danger-border)] bg-[color:var(--danger-surface)] text-[color:var(--danger)]";
+  }
+}
+
+function recommendationPathLabel(path: RecommendationPath) {
+  switch (path) {
+    case "model_backed":
+      return "Model-backed";
+    case "fallback":
+      return "Fallback rules";
+    case null:
+      return "No recommendation path";
+  }
+}
+
+function recommendationPathBadgeClassName(path: Exclude<RecommendationPath, null>) {
+  switch (path) {
+    case "model_backed":
+      return "border-[color:var(--accent-soft)] bg-[color:var(--accent-soft)] text-[color:var(--accent-strong)]";
+    case "fallback":
+      return "border border-[color:var(--border)] bg-white/80 text-[color:var(--foreground)]";
+  }
+}
+
+function sessionStatusBadgeClassName(status: SessionStatus) {
+  switch (status) {
+    case "ready":
+      return "bg-[color:var(--accent)] text-white";
+    case "parser_failure":
+    case "failed":
+      return "bg-[color:var(--danger)] text-white";
+    case "insufficient_evidence":
+      return "border border-[color:var(--border)] bg-white/85 text-[color:var(--foreground)]";
+    default:
+      return "border border-[color:var(--border)] bg-[color:var(--panel)] text-[color:var(--foreground)]";
+  }
+}
+
+function sessionOverviewTitle(snapshot: SessionSnapshot) {
+  if (snapshot.result?.status === "ready") {
+    return snapshot.result.summary.candidateHeadline;
+  }
+
+  if (snapshot.session.status === "insufficient_evidence") {
+    return snapshot.session.candidateLabel
+      ? `${snapshot.session.candidateLabel} needs more detail`
+      : "More detail needed before Unlockr can recommend a direction";
+  }
+
+  if (snapshot.session.status === "parser_failure") {
+    return "Unlockr could not extract the uploaded resume";
+  }
+
+  if (snapshot.session.status === "failed") {
+    return "Analysis stopped before a trustworthy result was produced";
+  }
+
+  return snapshot.session.candidateLabel
+    ? `Analyzing ${snapshot.session.candidateLabel}`
+    : "Unlockr is processing the resume";
+}
+
+function sessionOverviewSummary(snapshot: SessionSnapshot) {
+  if (snapshot.result?.status === "ready") {
+    return snapshot.result.summary.fitSummary;
+  }
+
+  if (snapshot.result?.status === "insufficient_evidence") {
+    return snapshot.result.userMessage;
+  }
+
+  if (snapshot.result?.status === "parser_failure") {
+    return snapshot.result.userMessage;
+  }
+
+  if (snapshot.session.status === "failed") {
+    return (
+      snapshot.session.latestErrorMessage ??
+      "Unlockr captured a non-parser failure before it could publish a recommendation summary."
+    );
+  }
+
+  if (!snapshot.latestRun) {
+    return "The session was created and is waiting for the worker to start the first processing step.";
+  }
+
+  if (snapshot.latestRun.stage === "parse") {
+    return "Unlockr is extracting text from the source before it builds the candidate profile and role directions.";
+  }
+
+  return "Unlockr is turning the parsed source into a structured profile, ranked directions, and follow-up guidance.";
+}
+
+function sessionStatusDetail(snapshot: SessionSnapshot) {
+  switch (snapshot.session.status) {
+    case "ready":
+      return snapshot.result?.status === "ready"
+        ? `${snapshot.result.recommendations.length} ranked direction${
+            snapshot.result.recommendations.length === 1 ? "" : "s"
+          } with ${evidenceQualityLabel(snapshot.result.summary.evidenceQuality).toLowerCase()}.`
+        : "The recommendation payload is ready for review.";
+    case "insufficient_evidence":
+      return "Unlockr found partial signals but will not stretch into a confident recommendation yet.";
+    case "parser_failure":
+      return "The first pass stopped at extraction, so Unlockr kept the session visible instead of guessing.";
+    case "failed":
+      return "This is a system failure state rather than an evidence-quality outcome.";
+    case "queued":
+      return "The run is waiting for the worker to begin.";
+    case "parsing":
+      return "The worker is extracting text from the resume source.";
+    case "analyzing":
+      return "The worker is building the profile and recommendation set.";
+  }
+}
+
+function sessionNextAction(snapshot: SessionSnapshot) {
+  if (snapshot.result?.status === "ready") {
+    const topRecommendation = snapshot.result.recommendations[0];
+    const nextStep = topRecommendation?.nextSteps[0];
+
+    if (nextStep) {
+      return {
+        title: nextStep.title,
+        detail: `${nextStep.detail} ${nextStep.timeline} · ${nextStep.effort} effort.`,
+        tone: "accent" as const,
+      };
+    }
+
+    return {
+      title: "Review the top recommendation first",
+      detail:
+        "Start with the highest-ranked role direction, confirm the evidence snippets, and then decide whether to act on it.",
+      tone: "accent" as const,
+    };
+  }
+
+  if (snapshot.result?.status === "insufficient_evidence") {
+    return {
+      title: "Answer the missing questions below",
+      detail:
+        "Use the recovery form to add the missing responsibilities, tools, domains, or outcomes before rerunning the session.",
+      tone: "neutral" as const,
+    };
+  }
+
+  if (snapshot.result?.status === "parser_failure") {
+    switch (snapshot.result.requiredAction) {
+      case "paste_text":
+        return {
+          title: "Paste cleaned resume text",
+          detail:
+            "Bypass extraction with plain text in the recovery form below while keeping this failed upload available for debugging.",
+          tone: "danger" as const,
+        };
+      case "reupload":
+        return {
+          title: "Retry with a cleaner file",
+          detail:
+            "Upload a replacement PDF, DOCX, or TXT file in the recovery flow below before starting a brand-new intake.",
+          tone: "neutral" as const,
+        };
+      case "contact_support":
+        return {
+          title: "Use the manual debug flow",
+          detail:
+            "This failure was not marked retryable from the product surface, so inspect the debug section before retrying.",
+          tone: "danger" as const,
+        };
+    }
+  }
+
+  if (snapshot.session.status === "failed") {
+    return {
+      title: "Inspect the debug section and health checks",
+      detail:
+        "Capture the failure metadata before retrying or escalating so the next run does not lose the original error context.",
+      tone: "danger" as const,
+    };
+  }
+
+  return {
+    title: "Keep this page open",
+    detail:
+      "Unlockr refreshes this session while it moves through queue, parsing, and analysis work.",
+    tone: "neutral" as const,
+  };
+}
+
+function nextActionCardClassName(tone: "accent" | "danger" | "neutral") {
+  switch (tone) {
+    case "accent":
+      return "border-[color:var(--accent-soft)] bg-[color:var(--accent-soft)]";
+    case "danger":
+      return "border-[color:var(--danger-border)] bg-[color:var(--danger-surface)]";
+    case "neutral":
+      return "border-[color:var(--border)] bg-white/80";
   }
 }
 
@@ -265,11 +463,11 @@ function SessionResult({ result }: { result: AnalysisResult | null }) {
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-                Summary
+                Supporting evidence
               </p>
-              <h2 className="mt-3 text-2xl font-semibold">{result.summary.candidateHeadline}</h2>
+              <h2 className="mt-3 text-2xl font-semibold">Why Unlockr believes this direction</h2>
               <p className="mt-2 max-w-2xl text-sm leading-7 text-[color:var(--muted-foreground)]">
-                {result.summary.fitSummary}
+                {evidenceQualitySummary(result.summary.evidenceQuality)}
               </p>
             </div>
             <div
@@ -281,13 +479,26 @@ function SessionResult({ result }: { result: AnalysisResult | null }) {
             </div>
           </div>
 
-          <div className="mt-5 rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-              Evidence quality
-            </p>
-            <p className="mt-2 text-sm leading-7 text-[color:var(--muted-foreground)]">
-              {evidenceQualitySummary(result.summary.evidenceQuality)}
-            </p>
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <div className="rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
+                Recommendation count
+              </p>
+              <p className="mt-2 text-3xl font-semibold">{result.recommendations.length}</p>
+              <p className="mt-2 text-sm leading-7 text-[color:var(--muted-foreground)]">
+                Review the highest-ranked direction first, then use the later
+                options as fallbacks or adjacent paths.
+              </p>
+            </div>
+            <div className="rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
+                How to read the page
+              </p>
+              <p className="mt-2 text-sm leading-7 text-[color:var(--muted-foreground)]">
+                Confirm that the evidence snippets match the source, then use the
+                gaps and risks before acting on the recommended next step.
+              </p>
+            </div>
           </div>
         </section>
 
@@ -488,6 +699,192 @@ function SessionResult({ result }: { result: AnalysisResult | null }) {
         </span>
       </div>
     </section>
+  );
+}
+
+function SessionOverview({ snapshot }: { snapshot: SessionSnapshot }) {
+  const nextAction = sessionNextAction(snapshot);
+  const currentStatusDetail = sessionStatusDetail(snapshot);
+  const recommendationPath = snapshot.result?.metadata.recommendationPath ?? null;
+
+  return (
+    <section className="rounded-[2rem] border border-[color:var(--border)] bg-[color:var(--panel)] p-6">
+      <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
+            Session overview
+          </p>
+          <h1 className="mt-3 text-3xl font-semibold tracking-tight md:text-4xl">
+            {sessionOverviewTitle(snapshot)}
+          </h1>
+          <p className="mt-3 max-w-3xl text-sm leading-7 text-[color:var(--muted-foreground)] md:text-base">
+            {sessionOverviewSummary(snapshot)}
+          </p>
+          <div className="mt-5 flex flex-wrap gap-3 text-sm">
+            <span
+              className={`rounded-full px-4 py-2 font-semibold ${sessionStatusBadgeClassName(
+                snapshot.session.status,
+              )}`}
+            >
+              {sessionStatusLabel(snapshot.session.status)}
+            </span>
+            <span className="rounded-full border border-[color:var(--border)] bg-white/80 px-4 py-2">
+              {sessionSourceLabel(snapshot.session.sourceType)}
+            </span>
+            {recommendationPath ? (
+              <span
+                className={`rounded-full border px-4 py-2 ${recommendationPathBadgeClassName(
+                  recommendationPath,
+                )}`}
+              >
+                {recommendationPathLabel(recommendationPath)}
+              </span>
+            ) : null}
+            {snapshot.result?.status === "ready" ? (
+              <span
+                className={`rounded-full border px-4 py-2 ${evidenceQualityBadgeClassName(
+                  snapshot.result.summary.evidenceQuality,
+                )}`}
+              >
+                {evidenceQualityLabel(snapshot.result.summary.evidenceQuality)}
+              </span>
+            ) : null}
+          </div>
+        </div>
+
+        <div
+          className={`rounded-[1.75rem] border p-5 ${nextActionCardClassName(nextAction.tone)}`}
+        >
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
+            Next recommended action
+          </p>
+          <h2 className="mt-3 text-xl font-semibold">{nextAction.title}</h2>
+          <p className="mt-2 text-sm leading-7 text-[color:var(--muted-foreground)]">
+            {nextAction.detail}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-6 grid gap-4 md:grid-cols-3">
+        <div className="rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
+            Current status
+          </p>
+          <p className="mt-3 text-sm leading-7">{currentStatusDetail}</p>
+        </div>
+        <div className="rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
+            Intake received
+          </p>
+          <p className="mt-3 text-sm font-semibold">
+            {snapshot.session.candidateLabel ?? "No candidate label supplied"}
+          </p>
+          <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
+            Source: {sessionSourceLabel(snapshot.session.sourceType)}
+          </p>
+        </div>
+        <div className="rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
+            Session timing
+          </p>
+          <p className="mt-3 text-sm font-semibold">
+            Started {formatSessionDate(snapshot.session.createdAt)}
+          </p>
+          <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
+            Updated {formatSessionDate(snapshot.session.updatedAt)}
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function SessionDebugDetails({ snapshot }: { snapshot: SessionSnapshot }) {
+  const debugItems = [
+    { label: "Session ID", value: snapshot.session.id },
+    {
+      label: "Current run",
+      value: snapshot.latestRun
+        ? `${snapshot.latestRun.stage} · ${snapshot.latestRun.status}`
+        : "Run not created",
+    },
+    {
+      label: "Queue job ID",
+      value: snapshot.latestRun?.queueJobId ?? "pending",
+    },
+    {
+      label: "Contract version",
+      value: snapshot.session.contractVersion ?? "pending",
+    },
+    {
+      label: "Parser version",
+      value: snapshot.session.parserVersion ?? "pending",
+    },
+    {
+      label: "Recommendation path",
+      value: recommendationPathLabel(snapshot.result?.metadata.recommendationPath ?? null),
+    },
+    {
+      label: "Model provider",
+      value: snapshot.result?.metadata.model?.provider ?? "pending",
+    },
+    {
+      label: "Model version",
+      value: snapshot.session.modelVersion ?? "pending",
+    },
+    {
+      label: "Prompt version",
+      value: snapshot.session.promptVersion ?? "pending",
+    },
+    {
+      label: "Taxonomy version",
+      value: snapshot.session.taxonomyVersion ?? "pending",
+    },
+    {
+      label: "Recommendation set",
+      value: snapshot.recommendationSet?.id ?? "not written",
+    },
+  ];
+
+  if (snapshot.latestRun?.errorCode) {
+    debugItems.push({
+      label: "Latest run error",
+      value: `${snapshot.latestRun.errorCode}${
+        snapshot.latestRun.errorMessage ? ` · ${snapshot.latestRun.errorMessage}` : ""
+      }`,
+    });
+  } else if (snapshot.session.latestErrorCode) {
+    debugItems.push({
+      label: "Latest session error",
+      value: `${snapshot.session.latestErrorCode}${
+        snapshot.session.latestErrorMessage ? ` · ${snapshot.session.latestErrorMessage}` : ""
+      }`,
+    });
+  }
+
+  return (
+    <details className="rounded-[2rem] border border-[color:var(--border)] bg-white/80 p-6">
+      <summary className="cursor-pointer list-none text-lg font-semibold">
+        Debug details
+      </summary>
+      <p className="mt-3 max-w-3xl text-sm leading-7 text-[color:var(--muted-foreground)]">
+        Raw identifiers, queue state, and contract lineage stay here so the
+        first screen can stay focused on outcome and next action.
+      </p>
+      <div className="mt-5 grid gap-3 md:grid-cols-2">
+        {debugItems.map((item) => (
+          <div
+            key={item.label}
+            className="rounded-[1.5rem] border border-[color:var(--border)] bg-[color:var(--panel)] p-4"
+          >
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
+              {item.label}
+            </p>
+            <p className="mt-2 break-all text-sm leading-6">{item.value}</p>
+          </div>
+        ))}
+      </div>
+    </details>
   );
 }
 
@@ -1127,59 +1524,7 @@ export function SessionView({ initialSnapshot }: { initialSnapshot: SessionSnaps
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-[2rem] border border-[color:var(--border)] bg-[color:var(--panel)] p-6">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-            Session
-          </p>
-          <h1 className="mt-2 text-3xl font-semibold">{snapshot.session.id}</h1>
-          <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-            Created {formatSessionDate(snapshot.session.createdAt)} · Updated{" "}
-            {formatSessionDate(snapshot.session.updatedAt)}
-          </p>
-        </div>
-        <div className="rounded-full bg-[color:var(--accent)] px-5 py-3 text-sm font-semibold text-white">
-          {sessionStatusLabel(snapshot.session.status)}
-        </div>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-[2rem] border border-[color:var(--border)] bg-white/80 p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-            Intake
-          </p>
-          <p className="mt-3 text-sm">
-            {sessionSourceLabel(snapshot.session.sourceType)}
-          </p>
-          <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-            {snapshot.session.candidateLabel || "No candidate label supplied"}
-          </p>
-        </div>
-        <div className="rounded-[2rem] border border-[color:var(--border)] bg-white/80 p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-            Queue
-          </p>
-          <p className="mt-3 text-sm">
-            {snapshot.latestRun
-              ? `${snapshot.latestRun.stage} · ${snapshot.latestRun.status}`
-              : "Run not created"}
-          </p>
-          <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-            Job ID: {snapshot.latestRun?.queueJobId ?? "pending"}
-          </p>
-        </div>
-        <div className="rounded-[2rem] border border-[color:var(--border)] bg-white/80 p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-            Metadata
-          </p>
-          <p className="mt-3 text-sm">Contract {snapshot.session.contractVersion ?? "pending"}</p>
-          <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-            Parser {snapshot.session.parserVersion ?? "pending"}
-          </p>
-        </div>
-      </div>
-
-      <SessionLineage snapshot={snapshot} />
+      <SessionOverview snapshot={snapshot} />
 
       {!isTerminal ? (
         <div className="rounded-[2rem] border border-[color:var(--border)] bg-[color:var(--panel)] p-6">
@@ -1190,13 +1535,17 @@ export function SessionView({ initialSnapshot }: { initialSnapshot: SessionSnaps
         </div>
       ) : null}
 
-      <CandidateProfileView candidateProfile={snapshot.candidateProfile} />
-
       <SessionResult result={snapshot.result} />
 
       <SessionRecovery snapshot={snapshot} />
 
       <SessionFeedback snapshot={snapshot} onRefresh={reloadSnapshot} />
+
+      <CandidateProfileView candidateProfile={snapshot.candidateProfile} />
+
+      <SessionLineage snapshot={snapshot} />
+
+      <SessionDebugDetails snapshot={snapshot} />
 
       <div className="flex flex-wrap gap-3 text-sm">
         <Link
