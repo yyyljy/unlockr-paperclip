@@ -68,6 +68,11 @@ path for launch.
 | `RECOMMENDATION_MODEL_VERSION` | model or ruleset version recorded on outputs | `.env.example` -> `rules-2026-04-02` | current launch model or ruleset version | both |
 | `RECOMMENDATION_PROMPT_VERSION` | prompt or decision-policy version label | `.env.example` -> `phase1-rules-seed` | current launch prompt or policy version | both |
 | `RECOMMENDATION_TAXONOMY_VERSION` | taxonomy version label written onto outputs | `.env.example` -> `2026-04-02` | current launch taxonomy version label | both |
+| `CODEX_RECOMMENDATION_ENABLED` | enables the codex-local recommendation adapter | `.env.example` -> `false` | `true` when the worker host should shell out to Codex | both when enabled |
+| `CODEX_RECOMMENDATION_CLI_PATH` | path to the Codex CLI binary used by the worker | `.env.example` -> `codex` | absolute path if `codex` is not on `PATH` | both when enabled |
+| `CODEX_RECOMMENDATION_MODEL` | optional explicit model override passed to `codex exec` | `.env.example` -> blank | launch model override when required | both when enabled |
+| `CODEX_RECOMMENDATION_PROMPT_VERSION` | prompt version label recorded on codex-local outputs | `.env.example` -> `phase2-codex-local-v1` | launch Codex prompt label | both when enabled |
+| `CODEX_RECOMMENDATION_TIMEOUT_MS` | timeout budget for the codex-local adapter | `.env.example` -> `180000` | launch timeout budget; keep enough headroom for cold `gpt-5.4` xhigh runs | both when enabled |
 | `OPENAI_API_KEY` | secret used by the model-backed recommendation adapter | `.env.example` -> blank | deploy-time OpenAI secret | both when enabled |
 | `OPENAI_BASE_URL` | OpenAI-compatible API base URL | `.env.example` -> `https://api.openai.com/v1` | provider base URL | both when enabled |
 | `OPENAI_RECOMMENDATION_MODEL` | model id used for model-backed recommendations | `.env.example` -> blank | launch model id | both when enabled |

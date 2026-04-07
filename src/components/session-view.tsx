@@ -21,12 +21,17 @@ type FeedbackSentiment = NonNullable<SessionSnapshot["feedbackEvent"]>["sentimen
 type RecoveryResponse = { sessionId?: string; message?: string } | null;
 type ParserFailureRecoveryMode = "file_upload" | "pasted_text";
 type ReadyEvidenceQuality = Extract<AnalysisResult, { status: "ready" }>["summary"]["evidenceQuality"];
+type ReadyRecommendation = Extract<
+  AnalysisResult,
+  { status: "ready" }
+>["recommendations"][number];
 type RecommendationConfidenceLabel = Extract<
   AnalysisResult,
   { status: "ready" }
 >["recommendations"][number]["confidence"]["label"];
 type RecommendationGapUrgency = Extract<AnalysisResult, { status: "ready" }>["recommendations"][number]["gaps"][number]["urgency"];
 type RecommendationPath = AnalysisResult["metadata"]["recommendationPath"];
+type RecommendationPathContext = AnalysisResult["metadata"]["pathContext"];
 type SessionStatus = SessionSnapshot["session"]["status"];
 
 const recoveryClarificationMaxLength = 4000;
@@ -49,35 +54,35 @@ async function fetchSessionSnapshot(sessionId: string) {
 function confidenceLabel(confidence: RecommendationConfidenceLabel) {
   switch (confidence) {
     case "high":
-      return "High confidence";
+      return "적합도 높음";
     case "medium":
-      return "Medium confidence";
+      return "적합도 보통";
     case "low":
-      return "Low confidence";
+      return "적합도 낮음";
     case "insufficient":
-      return "Insufficient confidence";
+      return "판단 보류";
   }
 }
 
 function evidenceQualityLabel(evidenceQuality: ReadyEvidenceQuality) {
   switch (evidenceQuality) {
     case "strong":
-      return "Strong evidence";
+      return "근거 강함";
     case "mixed":
-      return "Mixed evidence";
+      return "근거 보통";
     case "thin":
-      return "Thin evidence";
+      return "근거 부족";
   }
 }
 
 function evidenceQualitySummary(evidenceQuality: ReadyEvidenceQuality) {
   switch (evidenceQuality) {
     case "strong":
-      return "Multiple signals line up across the source material, so these recommendations are ready for action with less verification work.";
+      return "여러 근거가 같은 방향을 가리켜 바로 검토하고 행동으로 옮기기 좋은 상태입니다.";
     case "mixed":
-      return "The direction is grounded, but some role depth or tool ownership is still missing. Review the flagged gaps and risks before acting.";
+      return "방향은 보이지만 역할 깊이나 도구 맥락이 덜 드러나 있어, 표시된 빈틈을 먼저 확인하는 편이 좋습니다.";
     case "thin":
-      return "Unlockr found a plausible direction, but the proof base is narrow. Treat this as a starting point and close the missing evidence first.";
+      return "가능성 있는 방향은 보이지만 근거 폭이 좁습니다. 출발점으로 보고 부족한 정보를 먼저 보완해 주세요.";
   }
 }
 
@@ -95,20 +100,85 @@ function evidenceQualityBadgeClassName(evidenceQuality: ReadyEvidenceQuality) {
 function recommendationPathLabel(path: RecommendationPath) {
   switch (path) {
     case "model_backed":
-      return "Model-backed";
+      return "모델 기반 판단";
     case "fallback":
-      return "Fallback rules";
+      return "보조 규칙 판단";
     case null:
-      return "No recommendation path";
+      return "판단 경로 없음";
   }
 }
 
-function recommendationPathBadgeClassName(path: Exclude<RecommendationPath, null>) {
+function recommendationPathBadgeClassName(path: RecommendationPath) {
   switch (path) {
     case "model_backed":
       return "border-[color:var(--accent-soft)] bg-[color:var(--accent-soft)] text-[color:var(--accent-strong)]";
     case "fallback":
       return "border border-[color:var(--border)] bg-white/80 text-[color:var(--foreground)]";
+    case null:
+      return "border border-[color:var(--border)] bg-[color:var(--panel)] text-[color:var(--muted-foreground)]";
+  }
+}
+
+function pathProviderLabel(provider: string | null | undefined) {
+  switch (provider) {
+    case "codex-local":
+      return "Codex local";
+    case "openai":
+      return "OpenAI";
+    default:
+      return provider ?? "모델";
+  }
+}
+
+function recommendationPathSummary(input: {
+  recommendationPath: RecommendationPath;
+  pathContext: RecommendationPathContext;
+}) {
+  if (input.recommendationPath === "model_backed") {
+    return {
+      title: "모델 분석을 통과한 결과입니다",
+      detail:
+        "이번 결과는 모델 판단과 저장된 근거 문장을 함께 통과한 경로입니다. 그래도 아래 근거와 빈틈을 먼저 확인하고 움직이는 편이 좋습니다.",
+      tone: "accent" as const,
+    };
+  }
+
+  if (input.pathContext?.status === "fallback_timeout") {
+    return {
+      title: "모델 응답이 길어져 보조 규칙으로 전환되었습니다",
+      detail: `${pathProviderLabel(
+        input.pathContext.attemptedProvider,
+      )} 응답이 제한 시간 안에 끝나지 않아 이번 결과는 보조 규칙으로 정리되었습니다. 개인화된 모델 해석으로 받아들이기보다 아래 근거 문장을 먼저 확인해 주세요.`,
+      tone: "warning" as const,
+    };
+  }
+
+  if (input.pathContext?.status === "fallback_error") {
+    return {
+      title: "모델 경로 오류로 보조 규칙 판단을 보여드립니다",
+      detail: `${pathProviderLabel(
+        input.pathContext.attemptedProvider,
+      )} 경로에서 오류가 발생해 이번 결과는 보조 규칙으로 생성되었습니다. 역할 방향은 참고용으로 보고 근거와 주의할 점을 함께 확인해 주세요.`,
+      tone: "neutral" as const,
+    };
+  }
+
+  return {
+    title: "이번 결과는 보조 규칙으로 정리되었습니다",
+    detail:
+      "현재 이력서에 직접 드러난 역할, 도구, 성과 신호를 바탕으로 규칙 점수를 계산한 결과입니다. 아래 근거 문장을 먼저 확인하고 해석해 주세요.",
+    tone: "neutral" as const,
+  };
+}
+
+function recommendationPathSummaryClassName(tone: "accent" | "neutral" | "warning") {
+  switch (tone) {
+    case "accent":
+      return "border-[color:var(--accent-soft)] bg-[color:var(--accent-soft)]/60";
+    case "warning":
+      return "border-[color:var(--danger-border)] bg-[color:var(--danger-surface)]";
+    case "neutral":
+      return "border-[color:var(--border)] bg-white/80";
   }
 }
 
@@ -133,21 +203,21 @@ function sessionOverviewTitle(snapshot: SessionSnapshot) {
 
   if (snapshot.session.status === "insufficient_evidence") {
     return snapshot.session.candidateLabel
-      ? `${snapshot.session.candidateLabel} needs more detail`
-      : "More detail needed before Unlockr can recommend a direction";
+      ? `${snapshot.session.candidateLabel}에 대해 조금 더 정보가 필요합니다`
+      : "추천 전에 조금 더 정보가 필요합니다";
   }
 
   if (snapshot.session.status === "parser_failure") {
-    return "Unlockr could not extract the uploaded resume";
+    return "업로드한 파일을 읽어들이지 못했습니다";
   }
 
   if (snapshot.session.status === "failed") {
-    return "Analysis stopped before a trustworthy result was produced";
+    return "결과를 만들기 전에 처리가 중단되었습니다";
   }
 
   return snapshot.session.candidateLabel
-    ? `Analyzing ${snapshot.session.candidateLabel}`
-    : "Unlockr is processing the resume";
+    ? `${snapshot.session.candidateLabel} 결과를 준비하고 있습니다`
+    : "Unlockr가 결과를 준비하고 있습니다";
 }
 
 function sessionOverviewSummary(snapshot: SessionSnapshot) {
@@ -166,41 +236,39 @@ function sessionOverviewSummary(snapshot: SessionSnapshot) {
   if (snapshot.session.status === "failed") {
     return (
       snapshot.session.latestErrorMessage ??
-      "Unlockr captured a non-parser failure before it could publish a recommendation summary."
+      "근거 있는 결과를 보여주기 전에 시스템 처리 문제로 멈췄습니다."
     );
   }
 
   if (!snapshot.latestRun) {
-    return "The session was created and is waiting for the worker to start the first processing step.";
+    return "요청은 접수되었고 첫 작업을 시작하기 전입니다.";
   }
 
   if (snapshot.latestRun.stage === "parse") {
-    return "Unlockr is extracting text from the source before it builds the candidate profile and role directions.";
+    return "이력서에서 텍스트를 읽어 핵심 정보를 정리하고 있습니다.";
   }
 
-  return "Unlockr is turning the parsed source into a structured profile, ranked directions, and follow-up guidance.";
+  return "읽어낸 내용을 바탕으로 프로필, 추천 방향, 다음 행동을 정리하고 있습니다.";
 }
 
 function sessionStatusDetail(snapshot: SessionSnapshot) {
   switch (snapshot.session.status) {
     case "ready":
       return snapshot.result?.status === "ready"
-        ? `${snapshot.result.recommendations.length} ranked direction${
-            snapshot.result.recommendations.length === 1 ? "" : "s"
-          } with ${evidenceQualityLabel(snapshot.result.summary.evidenceQuality).toLowerCase()}.`
-        : "The recommendation payload is ready for review.";
+        ? `추천 방향 ${snapshot.result.recommendations.length}개를 정리했고 ${evidenceQualityLabel(snapshot.result.summary.evidenceQuality)} 상태입니다.`
+        : "결과는 준비되었고 이제 내용을 확인하면 됩니다.";
     case "insufficient_evidence":
-      return "Unlockr found partial signals but will not stretch into a confident recommendation yet.";
+      return "가능성은 보였지만 지금 정보만으로는 자신 있게 추천하지 않았습니다.";
     case "parser_failure":
-      return "The first pass stopped at extraction, so Unlockr kept the session visible instead of guessing.";
+      return "첫 단계에서 파일 읽기가 멈춰 억지 판단 대신 복구 경로를 먼저 보여줍니다.";
     case "failed":
-      return "This is a system failure state rather than an evidence-quality outcome.";
+      return "정보 부족이 아니라 시스템 처리 오류로 멈춘 상태입니다.";
     case "queued":
-      return "The run is waiting for the worker to begin.";
+      return "작업 대기열에서 순서를 기다리고 있습니다.";
     case "parsing":
-      return "The worker is extracting text from the resume source.";
+      return "이력서 텍스트를 읽고 정리하는 중입니다.";
     case "analyzing":
-      return "The worker is building the profile and recommendation set.";
+      return "프로필과 추천 방향을 만드는 중입니다.";
   }
 }
 
@@ -212,24 +280,24 @@ function sessionNextAction(snapshot: SessionSnapshot) {
     if (nextStep) {
       return {
         title: nextStep.title,
-        detail: `${nextStep.detail} ${nextStep.timeline} · ${nextStep.effort} effort.`,
+        detail: `${nextStep.detail} ${nextStep.timeline} · ${nextStep.effort} 강도.`,
         tone: "accent" as const,
       };
     }
 
     return {
-      title: "Review the top recommendation first",
+      title: "가장 높은 순위 방향부터 검토하세요",
       detail:
-        "Start with the highest-ranked role direction, confirm the evidence snippets, and then decide whether to act on it.",
+        "가장 가능성이 높은 방향의 근거를 먼저 확인한 뒤, 부족한 점과 다음 행동을 차례로 보는 흐름이 좋습니다.",
       tone: "accent" as const,
     };
   }
 
   if (snapshot.result?.status === "insufficient_evidence") {
     return {
-      title: "Answer the missing questions below",
+      title: "부족한 정보를 먼저 보완하세요",
       detail:
-        "Use the recovery form to add the missing responsibilities, tools, domains, or outcomes before rerunning the session.",
+        "아래 보완 입력에 업무 범위, 사용 도구, 산업 맥락, 성과처럼 빠진 정보를 추가한 뒤 다시 실행해 주세요.",
       tone: "neutral" as const,
     };
   }
@@ -238,23 +306,23 @@ function sessionNextAction(snapshot: SessionSnapshot) {
     switch (snapshot.result.requiredAction) {
       case "paste_text":
         return {
-          title: "Paste cleaned resume text",
+          title: "정리된 텍스트로 다시 시도하세요",
           detail:
-            "Bypass extraction with plain text in the recovery form below while keeping this failed upload available for debugging.",
+            "파일 읽기 대신 아래 복구 입력에 정리된 이력서 텍스트를 붙여 넣으면 기존 실패 기록은 유지한 채 새 결과를 만들 수 있습니다.",
           tone: "danger" as const,
         };
       case "reupload":
         return {
-          title: "Retry with a cleaner file",
+          title: "더 깨끗한 파일로 다시 업로드하세요",
           detail:
-            "Upload a replacement PDF, DOCX, or TXT file in the recovery flow below before starting a brand-new intake.",
+            "교체용 PDF, DOCX, TXT 파일을 다시 올려 읽기 품질을 높인 뒤 새 결과를 만들어 보세요.",
           tone: "neutral" as const,
         };
       case "contact_support":
         return {
-          title: "Use the manual debug flow",
+          title: "기술 정보 확인 후 수동으로 대응하세요",
           detail:
-            "This failure was not marked retryable from the product surface, so inspect the debug section before retrying.",
+            "이 실패는 화면에서 바로 재시도할 수 없도록 표시되어 있으니, 아래 기술 정보를 먼저 확인해 주세요.",
           tone: "danger" as const,
         };
     }
@@ -262,17 +330,17 @@ function sessionNextAction(snapshot: SessionSnapshot) {
 
   if (snapshot.session.status === "failed") {
     return {
-      title: "Inspect the debug section and health checks",
+      title: "기술 정보와 상태를 먼저 확인하세요",
       detail:
-        "Capture the failure metadata before retrying or escalating so the next run does not lose the original error context.",
+        "다시 시도하거나 전달하기 전에 아래 기술 정보를 확인해 두면 원래 실패 맥락을 놓치지 않을 수 있습니다.",
       tone: "danger" as const,
     };
   }
 
   return {
-    title: "Keep this page open",
+    title: "결과가 정리될 때까지 잠시만 기다려 주세요",
     detail:
-      "Unlockr refreshes this session while it moves through queue, parsing, and analysis work.",
+      "대기, 읽기, 분석 상태에서는 이 페이지가 자동으로 새로고침됩니다.",
     tone: "neutral" as const,
   };
 }
@@ -291,11 +359,11 @@ function nextActionCardClassName(tone: "accent" | "danger" | "neutral") {
 function gapUrgencyLabel(urgency: RecommendationGapUrgency) {
   switch (urgency) {
     case "now":
-      return "Address now";
+      return "지금 보완";
     case "soon":
-      return "Address soon";
+      return "곧 보완";
     case "later":
-      return "Address later";
+      return "나중에 보완";
   }
 }
 
@@ -364,9 +432,9 @@ function CandidateProfileView({
   if (!candidateProfile) {
     return (
       <section className="rounded-[2rem] border border-[color:var(--border)] bg-[color:var(--panel)] p-6">
-        <h2 className="text-lg font-semibold">Candidate profile</h2>
+        <h2 className="text-lg font-semibold">정리된 프로필</h2>
         <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-          The worker has not persisted the structured profile yet.
+          아직 구조화된 프로필이 저장되지 않았습니다.
         </p>
       </section>
     );
@@ -378,24 +446,24 @@ function CandidateProfileView({
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-              Candidate profile
+              정리된 프로필
             </p>
             <h2 className="mt-3 text-2xl font-semibold">
-              {candidateProfile.headline?.value ?? "Profile extracted without a summary headline"}
+              {candidateProfile.headline?.value ?? "요약 문장 없이 프로필만 먼저 정리되었습니다"}
             </h2>
             <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-              Version {candidateProfile.profileVersion} · Built{" "}
+              버전 {candidateProfile.profileVersion} · 생성{" "}
               {formatSessionDate(candidateProfile.createdAt)}
             </p>
           </div>
           <div className="rounded-full border border-[color:var(--border)] px-4 py-2 text-sm">
-            {candidateProfile.sourceKind === "resume_text" ? "Pasted text" : "File upload"}
+            {candidateProfile.sourceKind === "resume_text" ? "텍스트 붙여넣기" : "파일 업로드"}
           </div>
         </div>
 
         {candidateProfile.coverageNotes.length > 0 ? (
           <div className="mt-5 rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 p-4">
-            <p className="text-sm font-semibold">Coverage notes</p>
+            <p className="text-sm font-semibold">읽은 범위 메모</p>
             <ul className="mt-3 space-y-2 text-sm text-[color:var(--muted-foreground)]">
               {candidateProfile.coverageNotes.map((note) => (
                 <li key={note}>• {note}</li>
@@ -407,33 +475,33 @@ function CandidateProfileView({
 
       <div className="grid gap-4 xl:grid-cols-2">
         <CandidateProfileSection
-          title="Role history"
-          emptyText="No role-history snippets were extracted."
+          title="역할 이력"
+          emptyText="추출된 역할 이력 문장이 없습니다."
           signals={candidateProfile.roleHistory}
         />
         <CandidateProfileSection
-          title="Role signals"
-          emptyText="No role-family signals were extracted."
+          title="직무 신호"
+          emptyText="추출된 직무 신호가 없습니다."
           signals={candidateProfile.roleSignals}
         />
         <CandidateProfileSection
-          title="Skills and tools"
-          emptyText="No explicit skills or tools were extracted."
+          title="기술과 도구"
+          emptyText="추출된 기술이나 도구 정보가 없습니다."
           signals={candidateProfile.skills}
         />
         <CandidateProfileSection
-          title="Domain signals"
-          emptyText="No reusable domain signals were extracted."
+          title="도메인 신호"
+          emptyText="추출된 도메인 신호가 없습니다."
           signals={candidateProfile.domainSignals}
         />
         <CandidateProfileSection
-          title="Achievement snippets"
-          emptyText="No measurable outcome snippets were extracted."
+          title="성과 문장"
+          emptyText="추출된 성과 문장이 없습니다."
           signals={candidateProfile.achievements}
         />
         <CandidateProfileSection
-          title="Education and certifications"
-          emptyText="No education or certification signals were extracted."
+          title="학력과 자격"
+          emptyText="추출된 학력이나 자격 정보가 없습니다."
           signals={[
             ...candidateProfile.educationSignals,
             ...candidateProfile.certificationSignals,
@@ -444,28 +512,208 @@ function CandidateProfileView({
   );
 }
 
+function RecommendationCard({ recommendation }: { recommendation: ReadyRecommendation }) {
+  return (
+    <article className="rounded-[2rem] border border-[color:var(--border)] bg-white/85 p-6 shadow-[0_10px_30px_rgba(18,19,20,0.05)]">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
+            추천 {recommendation.rank}
+          </p>
+          <h3 className="mt-2 text-xl font-semibold">{recommendation.roleTitle}</h3>
+          <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
+            {recommendation.targetDomains.join(" / ")}
+          </p>
+        </div>
+        <div className="rounded-full bg-[color:var(--accent-soft)] px-4 py-2 text-sm font-medium text-[color:var(--accent-strong)]">
+          {confidenceLabel(recommendation.confidence.label)} ·{" "}
+          {Math.round(recommendation.confidence.score * 100)}%
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-[1.5rem] border border-[color:var(--border)] bg-[color:var(--panel)] p-4">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
+          왜 이렇게 판단했나요
+        </p>
+        <p className="mt-2 text-sm leading-7 text-[color:var(--muted-foreground)]">
+          {recommendation.confidence.explanation}
+        </p>
+      </div>
+
+      <p className="mt-4 text-sm leading-7">{recommendation.rationale}</p>
+
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
+        <div>
+          <p className="text-sm font-semibold">직접 드러난 경험</p>
+          <ul className="mt-2 space-y-2 text-sm text-[color:var(--muted-foreground)]">
+            {recommendation.detectedExperience.map((item) => (
+              <li key={item}>• {item}</li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <p className="text-sm font-semibold">추가로 연결되는 가능성</p>
+          <ul className="mt-2 space-y-2 text-sm text-[color:var(--muted-foreground)]">
+            {recommendation.inferredPotential.map((item) => (
+              <li key={item}>• {item}</li>
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
+        <div>
+          <p className="text-sm font-semibold">근거 문장</p>
+          <div className="mt-2 space-y-3">
+            {recommendation.evidence.map((evidence) => (
+              <div
+                key={evidence.evidenceId}
+                className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--panel)] p-4 text-sm"
+              >
+                <p className="leading-6">“{evidence.snippet}”</p>
+                <p className="mt-2 text-[color:var(--muted-foreground)]">
+                  {evidence.reason}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="text-sm font-semibold">바로 할 다음 행동</p>
+          <div className="mt-2 space-y-3">
+            {recommendation.nextSteps.map((step) => (
+              <div
+                key={step.title}
+                className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--panel)] p-4 text-sm"
+              >
+                <p className="font-medium">{step.title}</p>
+                <p className="mt-1 text-[color:var(--muted-foreground)]">{step.detail}</p>
+                <p className="mt-2 text-xs uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
+                  {step.timeline} · {step.effort} 강도
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
+        <div className="rounded-[1.5rem] border border-[color:var(--border)] bg-[color:var(--panel)] p-4">
+          <p className="text-sm font-semibold">먼저 메우면 좋은 빈틈</p>
+          {recommendation.gaps.length === 0 ? (
+            <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
+              이 방향에서 바로 막히는 빈틈은 표시되지 않았습니다.
+            </p>
+          ) : (
+            <div className="mt-3 space-y-3">
+              {recommendation.gaps.map((gap) => (
+                <div
+                  key={`${recommendation.recommendationId}-${gap.title}`}
+                  className="rounded-2xl border border-[color:var(--border)] bg-white/80 p-4 text-sm"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="font-medium">{gap.title}</p>
+                    <span className="rounded-full border border-[color:var(--border)] px-3 py-1 text-xs uppercase tracking-[0.15em] text-[color:var(--muted-foreground)]">
+                      {gapUrgencyLabel(gap.urgency)}
+                    </span>
+                  </div>
+                  <p className="mt-2 leading-6 text-[color:var(--muted-foreground)]">
+                    {gap.detail}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-[1.5rem] border border-[color:var(--border)] bg-[color:var(--panel)] p-4">
+          <p className="text-sm font-semibold">주의할 점</p>
+          {recommendation.risks.length === 0 ? (
+            <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
+              추가로 크게 주의할 점은 표시되지 않았습니다.
+            </p>
+          ) : (
+            <div className="mt-3 space-y-3">
+              {recommendation.risks.map((risk) => (
+                <div
+                  key={`${recommendation.recommendationId}-${risk}`}
+                  className="rounded-2xl border border-[color:var(--border)] bg-white/80 p-4 text-sm"
+                >
+                  <p className="leading-6 text-[color:var(--muted-foreground)]">{risk}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </article>
+  );
+}
+
 function SessionResult({ result }: { result: AnalysisResult | null }) {
   if (!result) {
     return (
       <div className="rounded-[2rem] border border-[color:var(--border)] bg-[color:var(--panel)] p-6">
-        <h2 className="text-lg font-semibold">Waiting for result payload</h2>
+        <h2 className="text-lg font-semibold">아직 결과를 정리하는 중입니다</h2>
         <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-          The queue worker has not written a terminal contract yet.
+          종료 상태용 결과 데이터가 아직 저장되지 않았습니다.
         </p>
       </div>
     );
   }
 
   if (result.status === "ready") {
+    const [featuredRecommendation, ...otherRecommendations] = result.recommendations;
+    const pathSummary = recommendationPathSummary({
+      recommendationPath: result.metadata.recommendationPath,
+      pathContext: result.metadata.pathContext,
+    });
+
     return (
       <div className="space-y-6">
         <section className="rounded-[2rem] border border-[color:var(--border)] bg-[color:var(--panel)] p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-                Supporting evidence
+                가장 먼저 볼 방향
               </p>
-              <h2 className="mt-3 text-2xl font-semibold">Why Unlockr believes this direction</h2>
+              <h2 className="mt-3 text-2xl font-semibold">
+                {featuredRecommendation?.roleTitle ?? "가장 높은 우선순위 추천"}
+              </h2>
+              <p className="mt-2 max-w-2xl text-sm leading-7 text-[color:var(--muted-foreground)]">
+                근거 문장과 주의할 점을 먼저 확인한 뒤, 아래 다른 방향과 비교해 보세요.
+              </p>
+            </div>
+            <div
+              className={`rounded-full border px-4 py-2 text-sm font-semibold ${recommendationPathBadgeClassName(
+                result.metadata.recommendationPath,
+              )}`}
+            >
+              {recommendationPathLabel(result.metadata.recommendationPath)}
+            </div>
+          </div>
+
+          <div
+            className={`mt-5 rounded-[1.5rem] border p-4 ${recommendationPathSummaryClassName(
+              pathSummary.tone,
+            )}`}
+          >
+            <p className="text-sm font-semibold">{pathSummary.title}</p>
+            <p className="mt-2 text-sm leading-7 text-[color:var(--muted-foreground)]">
+              {pathSummary.detail}
+            </p>
+          </div>
+
+          {featuredRecommendation ? <div className="mt-5"><RecommendationCard recommendation={featuredRecommendation} /></div> : null}
+        </section>
+
+        <section className="rounded-[2rem] border border-[color:var(--border)] bg-[color:var(--panel)] p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
+                결과 읽는 법
+              </p>
+              <h2 className="mt-3 text-2xl font-semibold">왜 이 방향을 추천했는지 먼저 확인하세요</h2>
               <p className="mt-2 max-w-2xl text-sm leading-7 text-[color:var(--muted-foreground)]">
                 {evidenceQualitySummary(result.summary.evidenceQuality)}
               </p>
@@ -482,168 +730,42 @@ function SessionResult({ result }: { result: AnalysisResult | null }) {
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             <div className="rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-                Recommendation count
+                추천 방향 수
               </p>
               <p className="mt-2 text-3xl font-semibold">{result.recommendations.length}</p>
               <p className="mt-2 text-sm leading-7 text-[color:var(--muted-foreground)]">
-                Review the highest-ranked direction first, then use the later
-                options as fallbacks or adjacent paths.
+                가장 높은 순위 방향부터 보고, 뒤의 방향은 대안이나 인접 경로로 비교해 보세요.
               </p>
             </div>
             <div className="rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-                How to read the page
+                확인 순서
               </p>
               <p className="mt-2 text-sm leading-7 text-[color:var(--muted-foreground)]">
-                Confirm that the evidence snippets match the source, then use the
-                gaps and risks before acting on the recommended next step.
+                근거 문장이 실제 이력서와 맞는지 확인한 뒤, 부족한 점과 다음 행동을 보고 움직이면 됩니다.
               </p>
             </div>
           </div>
         </section>
 
-        <section className="grid gap-4">
-          {result.recommendations.map((recommendation) => (
-            <article
-              key={recommendation.recommendationId}
-              className="rounded-[2rem] border border-[color:var(--border)] bg-white/85 p-6 shadow-[0_10px_30px_rgba(18,19,20,0.05)]"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-                    Rank {recommendation.rank}
-                  </p>
-                  <h3 className="mt-2 text-xl font-semibold">{recommendation.roleTitle}</h3>
-                  <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-                    {recommendation.targetDomains.join(" / ")}
-                  </p>
-                </div>
-                <div className="rounded-full bg-[color:var(--accent-soft)] px-4 py-2 text-sm font-medium text-[color:var(--accent-strong)]">
-                  {confidenceLabel(recommendation.confidence.label)} ·{" "}
-                  {Math.round(recommendation.confidence.score * 100)}%
-                </div>
-              </div>
-
-              <div className="mt-4 rounded-[1.5rem] border border-[color:var(--border)] bg-[color:var(--panel)] p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-                  Why this confidence level
-                </p>
-                <p className="mt-2 text-sm leading-7 text-[color:var(--muted-foreground)]">
-                  {recommendation.confidence.explanation}
-                </p>
-              </div>
-
-              <p className="mt-4 text-sm leading-7">{recommendation.rationale}</p>
-
-              <div className="mt-5 grid gap-4 md:grid-cols-2">
-                <div>
-                  <p className="text-sm font-semibold">Detected experience</p>
-                  <ul className="mt-2 space-y-2 text-sm text-[color:var(--muted-foreground)]">
-                    {recommendation.detectedExperience.map((item) => (
-                      <li key={item}>• {item}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div>
-                  <p className="text-sm font-semibold">Inferred potential</p>
-                  <ul className="mt-2 space-y-2 text-sm text-[color:var(--muted-foreground)]">
-                    {recommendation.inferredPotential.map((item) => (
-                      <li key={item}>• {item}</li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-
-              <div className="mt-5 grid gap-4 md:grid-cols-2">
-                <div>
-                  <p className="text-sm font-semibold">Evidence snippets</p>
-                  <div className="mt-2 space-y-3">
-                    {recommendation.evidence.map((evidence) => (
-                      <div
-                        key={evidence.evidenceId}
-                        className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--panel)] p-4 text-sm"
-                      >
-                        <p className="leading-6">“{evidence.snippet}”</p>
-                        <p className="mt-2 text-[color:var(--muted-foreground)]">
-                          {evidence.reason}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <p className="text-sm font-semibold">Next steps</p>
-                  <div className="mt-2 space-y-3">
-                    {recommendation.nextSteps.map((step) => (
-                      <div
-                        key={step.title}
-                        className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--panel)] p-4 text-sm"
-                      >
-                        <p className="font-medium">{step.title}</p>
-                        <p className="mt-1 text-[color:var(--muted-foreground)]">
-                          {step.detail}
-                        </p>
-                        <p className="mt-2 text-xs uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-                          {step.timeline} · {step.effort} effort
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-5 grid gap-4 md:grid-cols-2">
-                <div className="rounded-[1.5rem] border border-[color:var(--border)] bg-[color:var(--panel)] p-4">
-                  <p className="text-sm font-semibold">Suggested gaps to close</p>
-                  {recommendation.gaps.length === 0 ? (
-                    <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-                      No immediate evidence gaps were flagged for this recommendation.
-                    </p>
-                  ) : (
-                    <div className="mt-3 space-y-3">
-                      {recommendation.gaps.map((gap) => (
-                        <div
-                          key={`${recommendation.recommendationId}-${gap.title}`}
-                          className="rounded-2xl border border-[color:var(--border)] bg-white/80 p-4 text-sm"
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-3">
-                            <p className="font-medium">{gap.title}</p>
-                            <span className="rounded-full border border-[color:var(--border)] px-3 py-1 text-xs uppercase tracking-[0.15em] text-[color:var(--muted-foreground)]">
-                              {gapUrgencyLabel(gap.urgency)}
-                            </span>
-                          </div>
-                          <p className="mt-2 leading-6 text-[color:var(--muted-foreground)]">
-                            {gap.detail}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="rounded-[1.5rem] border border-[color:var(--border)] bg-[color:var(--panel)] p-4">
-                  <p className="text-sm font-semibold">Decision risks</p>
-                  {recommendation.risks.length === 0 ? (
-                    <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-                      No additional decision risks were flagged for this recommendation.
-                    </p>
-                  ) : (
-                    <div className="mt-3 space-y-3">
-                      {recommendation.risks.map((risk) => (
-                        <div
-                          key={`${recommendation.recommendationId}-${risk}`}
-                          className="rounded-2xl border border-[color:var(--border)] bg-white/80 p-4 text-sm"
-                        >
-                          <p className="leading-6 text-[color:var(--muted-foreground)]">{risk}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </article>
-          ))}
-        </section>
+        {otherRecommendations.length > 0 ? (
+          <section className="space-y-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
+                함께 볼 다른 방향
+              </p>
+              <h2 className="mt-3 text-2xl font-semibold">비교해 볼 수 있는 후순위 추천</h2>
+            </div>
+            <div className="grid gap-4">
+              {otherRecommendations.map((recommendation) => (
+                <RecommendationCard
+                  key={recommendation.recommendationId}
+                  recommendation={recommendation}
+                />
+              ))}
+            </div>
+          </section>
+        ) : null}
       </div>
     );
   }
@@ -651,13 +773,13 @@ function SessionResult({ result }: { result: AnalysisResult | null }) {
   if (result.status === "insufficient_evidence") {
     return (
       <section className="rounded-[2rem] border border-[color:var(--border)] bg-[color:var(--panel)] p-6">
-        <h2 className="text-2xl font-semibold">Insufficient evidence</h2>
+        <h2 className="text-2xl font-semibold">조금 더 정보가 필요합니다</h2>
         <p className="mt-2 text-sm leading-7 text-[color:var(--muted-foreground)]">
           {result.userMessage}
         </p>
         <div className="mt-5 grid gap-5 md:grid-cols-2">
           <div>
-            <p className="text-sm font-semibold">Blocking findings</p>
+            <p className="text-sm font-semibold">지금 막히는 이유</p>
             <ul className="mt-2 space-y-2 text-sm text-[color:var(--muted-foreground)]">
               {result.blockingFindings.map((item) => (
                 <li key={item}>• {item}</li>
@@ -665,7 +787,7 @@ function SessionResult({ result }: { result: AnalysisResult | null }) {
             </ul>
           </div>
           <div>
-            <p className="text-sm font-semibold">Follow-up questions</p>
+            <p className="text-sm font-semibold">보완 질문</p>
             <ul className="mt-2 space-y-2 text-sm text-[color:var(--muted-foreground)]">
               {result.followUpQuestions.map((item) => (
                 <li key={item}>• {item}</li>
@@ -679,23 +801,22 @@ function SessionResult({ result }: { result: AnalysisResult | null }) {
 
   return (
     <section className="rounded-[2rem] border border-[color:var(--border)] bg-[color:var(--panel)] p-6">
-      <h2 className="text-2xl font-semibold">Parser failure state</h2>
+      <h2 className="text-2xl font-semibold">파일 읽기 단계에서 멈췄습니다</h2>
       <p className="mt-2 text-sm leading-7 text-[color:var(--muted-foreground)]">
         {result.userMessage}
       </p>
       <p className="mt-3 text-sm leading-7 text-[color:var(--muted-foreground)]">
-        Use the recovery action below to replace the file or paste cleaned text while keeping this
-        failed session available for debugging.
+        아래 복구 기능에서 파일을 교체하거나 정리된 텍스트를 넣어 다시 시도할 수 있고, 기존 실패 기록은 그대로 남습니다.
       </p>
       <div className="mt-5 flex flex-wrap gap-3 text-sm">
         <span className="rounded-full bg-[color:var(--accent-soft)] px-4 py-2 text-[color:var(--accent-strong)]">
-          error: {result.errorCode}
+          오류 코드: {result.errorCode}
         </span>
         <span className="rounded-full border border-[color:var(--border)] px-4 py-2">
-          action: {result.requiredAction}
+          권장 동작: {result.requiredAction}
         </span>
         <span className="rounded-full border border-[color:var(--border)] px-4 py-2">
-          retryable: {result.retryable ? "yes" : "no"}
+          재시도 가능: {result.retryable ? "예" : "아니오"}
         </span>
       </div>
     </section>
@@ -705,14 +826,13 @@ function SessionResult({ result }: { result: AnalysisResult | null }) {
 function SessionOverview({ snapshot }: { snapshot: SessionSnapshot }) {
   const nextAction = sessionNextAction(snapshot);
   const currentStatusDetail = sessionStatusDetail(snapshot);
-  const recommendationPath = snapshot.result?.metadata.recommendationPath ?? null;
 
   return (
     <section className="rounded-[2rem] border border-[color:var(--border)] bg-[color:var(--panel)] p-6">
       <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-            Session overview
+            결과 개요
           </p>
           <h1 className="mt-3 text-3xl font-semibold tracking-tight md:text-4xl">
             {sessionOverviewTitle(snapshot)}
@@ -731,13 +851,13 @@ function SessionOverview({ snapshot }: { snapshot: SessionSnapshot }) {
             <span className="rounded-full border border-[color:var(--border)] bg-white/80 px-4 py-2">
               {sessionSourceLabel(snapshot.session.sourceType)}
             </span>
-            {recommendationPath ? (
+            {snapshot.result ? (
               <span
                 className={`rounded-full border px-4 py-2 ${recommendationPathBadgeClassName(
-                  recommendationPath,
+                  snapshot.result.metadata.recommendationPath,
                 )}`}
               >
-                {recommendationPathLabel(recommendationPath)}
+                {recommendationPathLabel(snapshot.result.metadata.recommendationPath)}
               </span>
             ) : null}
             {snapshot.result?.status === "ready" ? (
@@ -756,7 +876,7 @@ function SessionOverview({ snapshot }: { snapshot: SessionSnapshot }) {
           className={`rounded-[1.75rem] border p-5 ${nextActionCardClassName(nextAction.tone)}`}
         >
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-            Next recommended action
+            지금 할 일
           </p>
           <h2 className="mt-3 text-xl font-semibold">{nextAction.title}</h2>
           <p className="mt-2 text-sm leading-7 text-[color:var(--muted-foreground)]">
@@ -768,30 +888,30 @@ function SessionOverview({ snapshot }: { snapshot: SessionSnapshot }) {
       <div className="mt-6 grid gap-4 md:grid-cols-3">
         <div className="rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 p-5">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-            Current status
+            현재 상태
           </p>
           <p className="mt-3 text-sm leading-7">{currentStatusDetail}</p>
         </div>
         <div className="rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 p-5">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-            Intake received
+            받은 입력
           </p>
           <p className="mt-3 text-sm font-semibold">
-            {snapshot.session.candidateLabel ?? "No candidate label supplied"}
+            {snapshot.session.candidateLabel ?? "이름이나 메모 없이 생성된 결과"}
           </p>
           <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-            Source: {sessionSourceLabel(snapshot.session.sourceType)}
+            입력 방식: {sessionSourceLabel(snapshot.session.sourceType)}
           </p>
         </div>
         <div className="rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 p-5">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-            Session timing
+            진행 시각
           </p>
           <p className="mt-3 text-sm font-semibold">
-            Started {formatSessionDate(snapshot.session.createdAt)}
+            시작 {formatSessionDate(snapshot.session.createdAt)}
           </p>
           <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-            Updated {formatSessionDate(snapshot.session.updatedAt)}
+            업데이트 {formatSessionDate(snapshot.session.updatedAt)}
           </p>
         </div>
       </div>
@@ -801,61 +921,61 @@ function SessionOverview({ snapshot }: { snapshot: SessionSnapshot }) {
 
 function SessionDebugDetails({ snapshot }: { snapshot: SessionSnapshot }) {
   const debugItems = [
-    { label: "Session ID", value: snapshot.session.id },
+    { label: "결과 ID", value: snapshot.session.id },
     {
-      label: "Current run",
+      label: "현재 실행 상태",
       value: snapshot.latestRun
         ? `${snapshot.latestRun.stage} · ${snapshot.latestRun.status}`
-        : "Run not created",
+        : "아직 실행이 만들어지지 않았습니다",
     },
     {
-      label: "Queue job ID",
-      value: snapshot.latestRun?.queueJobId ?? "pending",
+      label: "큐 작업 ID",
+      value: snapshot.latestRun?.queueJobId ?? "대기 중",
     },
     {
-      label: "Contract version",
-      value: snapshot.session.contractVersion ?? "pending",
+      label: "계약 버전",
+      value: snapshot.session.contractVersion ?? "대기 중",
     },
     {
-      label: "Parser version",
-      value: snapshot.session.parserVersion ?? "pending",
+      label: "파서 버전",
+      value: snapshot.session.parserVersion ?? "대기 중",
     },
     {
-      label: "Recommendation path",
+      label: "판단 경로",
       value: recommendationPathLabel(snapshot.result?.metadata.recommendationPath ?? null),
     },
     {
-      label: "Model provider",
-      value: snapshot.result?.metadata.model?.provider ?? "pending",
+      label: "모델 제공자",
+      value: snapshot.result?.metadata.model?.provider ?? "대기 중",
     },
     {
-      label: "Model version",
-      value: snapshot.session.modelVersion ?? "pending",
+      label: "모델 버전",
+      value: snapshot.session.modelVersion ?? "대기 중",
     },
     {
-      label: "Prompt version",
-      value: snapshot.session.promptVersion ?? "pending",
+      label: "프롬프트 버전",
+      value: snapshot.session.promptVersion ?? "대기 중",
     },
     {
-      label: "Taxonomy version",
-      value: snapshot.session.taxonomyVersion ?? "pending",
+      label: "분류 체계 버전",
+      value: snapshot.session.taxonomyVersion ?? "대기 중",
     },
     {
-      label: "Recommendation set",
-      value: snapshot.recommendationSet?.id ?? "not written",
+      label: "추천 묶음 ID",
+      value: snapshot.recommendationSet?.id ?? "아직 없음",
     },
   ];
 
   if (snapshot.latestRun?.errorCode) {
     debugItems.push({
-      label: "Latest run error",
+      label: "최근 실행 오류",
       value: `${snapshot.latestRun.errorCode}${
         snapshot.latestRun.errorMessage ? ` · ${snapshot.latestRun.errorMessage}` : ""
       }`,
     });
   } else if (snapshot.session.latestErrorCode) {
     debugItems.push({
-      label: "Latest session error",
+      label: "최근 결과 오류",
       value: `${snapshot.session.latestErrorCode}${
         snapshot.session.latestErrorMessage ? ` · ${snapshot.session.latestErrorMessage}` : ""
       }`,
@@ -865,11 +985,10 @@ function SessionDebugDetails({ snapshot }: { snapshot: SessionSnapshot }) {
   return (
     <details className="rounded-[2rem] border border-[color:var(--border)] bg-white/80 p-6">
       <summary className="cursor-pointer list-none text-lg font-semibold">
-        Debug details
+        기술 정보
       </summary>
       <p className="mt-3 max-w-3xl text-sm leading-7 text-[color:var(--muted-foreground)]">
-        Raw identifiers, queue state, and contract lineage stay here so the
-        first screen can stay focused on outcome and next action.
+        원본 식별자와 실행 상태 같은 기술 정보는 여기 모아 두고, 위 화면은 결과와 다음 행동에 집중하도록 분리했습니다.
       </p>
       <div className="mt-5 grid gap-3 md:grid-cols-2">
         {debugItems.map((item) => (
@@ -895,20 +1014,20 @@ function SessionLineage({ snapshot }: { snapshot: SessionSnapshot }) {
 
   const retriedFromHeading =
     snapshot.retriedFromSession?.status === "parser_failure"
-      ? "Recovered from a prior parser-failure run"
-      : "Recovered from a prior insufficient-evidence run";
+      ? "이전 파일 읽기 실패 결과에서 이어졌습니다"
+      : "이전 정보 보완 필요 결과에서 이어졌습니다";
   const retriedFromDescription =
     snapshot.retriedFromSession?.status === "parser_failure"
-      ? "This session restarted analysis after the earlier upload could not be extracted cleanly."
-      : "This session reuses earlier source material plus added clarification.";
+      ? "이 결과는 이전 업로드를 읽지 못해 교체 입력으로 다시 시작한 흐름입니다."
+      : "이 결과는 기존 입력에 추가 설명을 붙여 다시 실행한 흐름입니다.";
 
   return (
     <section className="rounded-[2rem] border border-[color:var(--border)] bg-[color:var(--panel)] p-6">
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-          Recovery lineage
+          이어진 결과
         </p>
-        <h2 className="mt-3 text-2xl font-semibold">How this session connects</h2>
+        <h2 className="mt-3 text-2xl font-semibold">이 결과가 어디서 이어졌는지 보여줍니다</h2>
       </div>
 
       {snapshot.retriedFromSession ? (
@@ -920,7 +1039,7 @@ function SessionLineage({ snapshot }: { snapshot: SessionSnapshot }) {
               href={`/sessions/${snapshot.retriedFromSession.id}`}
               className="rounded-full border border-[color:var(--border)] px-4 py-2 font-semibold transition hover:bg-white/70"
             >
-              Open {snapshot.retriedFromSession.id}
+              이전 결과 열기 {snapshot.retriedFromSession.id}
             </Link>
             <span className="rounded-full bg-[color:var(--accent-soft)] px-4 py-2 text-[color:var(--accent-strong)]">
               {sessionStatusLabel(snapshot.retriedFromSession.status)}
@@ -934,7 +1053,7 @@ function SessionLineage({ snapshot }: { snapshot: SessionSnapshot }) {
 
       {snapshot.recoverySessions.length > 0 ? (
         <div className="mt-5 rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 p-4">
-          <p className="text-sm font-semibold">Recovery attempts started from this session</p>
+          <p className="text-sm font-semibold">이 결과에서 다시 시작된 후속 실행</p>
           <div className="mt-4 space-y-3">
             {snapshot.recoverySessions.map((recoverySession) => (
               <div
@@ -944,7 +1063,7 @@ function SessionLineage({ snapshot }: { snapshot: SessionSnapshot }) {
                 <div>
                   <p className="font-mono text-sm font-semibold">{recoverySession.id}</p>
                   <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-                    Created {formatSessionDate(recoverySession.createdAt)}
+                    생성 {formatSessionDate(recoverySession.createdAt)}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3 text-sm">
@@ -958,7 +1077,7 @@ function SessionLineage({ snapshot }: { snapshot: SessionSnapshot }) {
                     href={`/sessions/${recoverySession.id}`}
                     className="rounded-full border border-[color:var(--border)] px-4 py-2 font-semibold transition hover:bg-white/70"
                   >
-                    Open recovery
+                    후속 결과 열기
                   </Link>
                 </div>
               </div>
@@ -985,7 +1104,7 @@ function InsufficientEvidenceRecovery({ snapshot }: { snapshot: SessionSnapshot 
     event.preventDefault();
 
     if (clarificationText.trim().length < minimumRecoveryClarificationLength) {
-      setSubmissionError("Add a short clarification before retrying the session.");
+      setSubmissionError("다시 실행하기 전에 짧은 보완 설명을 적어 주세요.");
       return;
     }
 
@@ -1005,13 +1124,13 @@ function InsufficientEvidenceRecovery({ snapshot }: { snapshot: SessionSnapshot 
       const payload = (await response.json().catch(() => null)) as RecoveryResponse;
 
       if (!response.ok || !payload?.sessionId) {
-        setSubmissionError(payload?.message ?? "Failed to start the recovery session.");
+        setSubmissionError(payload?.message ?? "보완 실행을 시작하지 못했습니다.");
         return;
       }
 
       router.push(`/sessions/${payload.sessionId}`);
     } catch {
-      setSubmissionError("Failed to start the recovery session.");
+      setSubmissionError("보완 실행을 시작하지 못했습니다.");
     } finally {
       setIsSubmitting(false);
     }
@@ -1022,37 +1141,36 @@ function InsufficientEvidenceRecovery({ snapshot }: { snapshot: SessionSnapshot 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-            Recovery action
+            보완 실행
           </p>
-          <h2 className="mt-3 text-2xl font-semibold">Add the missing context</h2>
+          <h2 className="mt-3 text-2xl font-semibold">빠진 정보를 덧붙여 다시 실행하세요</h2>
           <p className="mt-2 max-w-2xl text-sm leading-7 text-[color:var(--muted-foreground)]">
-            Unlockr will reuse the existing source text, append this clarification, and open a
-            fresh analysis session instead of sending you back to the blank intake form.
+            기존 입력은 유지한 채 이 보완 설명만 덧붙여 새 결과를 만들 수 있습니다. 처음부터 다시 입력할 필요는 없습니다.
           </p>
         </div>
         <div className="rounded-full border border-[color:var(--border)] px-4 py-2 text-sm">
-          Recovery stays inside the product
+          현재 흐름 안에서 바로 이어집니다
         </div>
       </div>
 
       <form className="mt-5 space-y-4" onSubmit={handleSubmit}>
         <label className="block">
-          <span className="text-sm font-semibold">Clarifying follow-up context</span>
+          <span className="text-sm font-semibold">보완 설명</span>
           <textarea
             value={clarificationText}
             maxLength={recoveryClarificationMaxLength}
             disabled={isSubmitting}
             onChange={(event) => setClarificationText(event.target.value)}
-            placeholder="Add the concrete responsibilities, tools, domains, and outcomes that were missing from the first pass."
+            placeholder="첫 결과에서 부족했던 업무 범위, 사용 도구, 산업 맥락, 성과 내용을 구체적으로 적어 주세요."
             className="mt-2 min-h-32 w-full rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-[color:var(--accent)]"
           />
           <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
-            {clarificationText.length}/{recoveryClarificationMaxLength} characters
+            {clarificationText.length}/{recoveryClarificationMaxLength}자
           </p>
         </label>
 
         <div className="rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 p-4">
-          <p className="text-sm font-semibold">Suggested gaps to answer</p>
+          <p className="text-sm font-semibold">이 질문부터 답해 보세요</p>
           <ul className="mt-3 space-y-2 text-sm text-[color:var(--muted-foreground)]">
             {result.followUpQuestions.map((question) => (
               <li key={question}>• {question}</li>
@@ -1070,10 +1188,10 @@ function InsufficientEvidenceRecovery({ snapshot }: { snapshot: SessionSnapshot 
             disabled={isSubmitting}
             className="rounded-full bg-[color:var(--accent)] px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isSubmitting ? "Starting recovery..." : "Retry with clarification"}
+            {isSubmitting ? "보완 실행 시작 중..." : "보완 정보로 다시 실행"}
           </button>
           <p className="text-sm text-[color:var(--muted-foreground)]">
-            The new session will preserve a link back to this insufficient-evidence attempt.
+            새 결과에는 이 보완 전 시도와의 연결 정보가 그대로 남습니다.
           </p>
         </div>
       </form>
@@ -1111,17 +1229,17 @@ function ParserFailureRecovery({ snapshot }: { snapshot: SessionSnapshot }) {
       !activeResult.retryable ||
       activeResult.requiredAction === "contact_support"
     ) {
-      setSubmissionError("This parser failure is not marked retryable from the session page.");
+      setSubmissionError("이 파일 읽기 실패는 이 화면에서 바로 재시도할 수 없습니다.");
       return;
     }
 
     if (recoveryMode === "pasted_text" && resumeText.trim().length < minimumRecoveryResumeTextLength) {
-      setSubmissionError("Paste more clean resume text before starting a recovery session.");
+      setSubmissionError("다시 실행하기 전에 더 충분한 이력서 텍스트를 붙여 넣어 주세요.");
       return;
     }
 
     if (recoveryMode === "file_upload" && !resumeFile) {
-      setSubmissionError("Select a replacement PDF, DOCX, or TXT file before retrying.");
+      setSubmissionError("다시 시도하려면 교체할 PDF, DOCX, TXT 파일을 선택해 주세요.");
       return;
     }
 
@@ -1146,13 +1264,13 @@ function ParserFailureRecovery({ snapshot }: { snapshot: SessionSnapshot }) {
       const payload = (await response.json().catch(() => null)) as RecoveryResponse;
 
       if (!response.ok || !payload?.sessionId) {
-        setSubmissionError(payload?.message ?? "Failed to start the recovery session.");
+        setSubmissionError(payload?.message ?? "파일 복구 실행을 시작하지 못했습니다.");
         return;
       }
 
       router.push(`/sessions/${payload.sessionId}`);
     } catch {
-      setSubmissionError("Failed to start the recovery session.");
+      setSubmissionError("파일 복구 실행을 시작하지 못했습니다.");
     } finally {
       setIsSubmitting(false);
     }
@@ -1165,21 +1283,19 @@ function ParserFailureRecovery({ snapshot }: { snapshot: SessionSnapshot }) {
     return (
       <section className="rounded-[2rem] border border-[color:var(--border)] bg-[color:var(--panel)] p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-              Recovery action
-            </p>
-            <h2 className="mt-3 text-2xl font-semibold">Manual follow-up required</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-7 text-[color:var(--muted-foreground)]">
-              Unlockr captured this parser failure but did not mark it as retryable from the
-              product surface. Preserve this session for debugging and follow the operator
-              workflow before starting a brand-new intake manually.
-            </p>
-          </div>
-          <div className="rounded-full border border-[color:var(--border)] px-4 py-2 text-sm">
-            Original failed session stays visible
-          </div>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
+            복구 실행
+          </p>
+          <h2 className="mt-3 text-2xl font-semibold">수동 확인이 필요합니다</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-7 text-[color:var(--muted-foreground)]">
+            이 파일 읽기 실패는 화면에서 바로 복구할 수 없도록 표시되어 있습니다. 기술 정보를 먼저 확인한 뒤 새로 시작할지 결정해 주세요.
+          </p>
         </div>
+        <div className="rounded-full border border-[color:var(--border)] px-4 py-2 text-sm">
+          기존 실패 기록은 유지됩니다
+        </div>
+      </div>
       </section>
     );
   }
@@ -1189,32 +1305,30 @@ function ParserFailureRecovery({ snapshot }: { snapshot: SessionSnapshot }) {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-            Recovery action
+            복구 실행
           </p>
-          <h2 className="mt-3 text-2xl font-semibold">Start a fresh parser retry</h2>
+          <h2 className="mt-3 text-2xl font-semibold">새 입력으로 다시 시도하세요</h2>
           <p className="mt-2 max-w-2xl text-sm leading-7 text-[color:var(--muted-foreground)]">
-            Replace the broken file with a cleaner upload or bypass extraction by pasting clean
-            resume text directly. Unlockr will open a new linked session and keep this failed one
-            available for release checks.
+            더 깨끗한 파일로 교체하거나 정리된 텍스트를 직접 붙여 넣어 새 결과를 만들 수 있습니다. 기존 실패 기록은 그대로 남습니다.
           </p>
         </div>
         <div className="rounded-full border border-[color:var(--border)] px-4 py-2 text-sm">
-          Original failed session stays visible
+          기존 실패 기록은 유지됩니다
         </div>
       </div>
 
       <div className="mt-5 rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 p-4">
-        <p className="text-sm font-semibold">Suggested first move</p>
+        <p className="text-sm font-semibold">먼저 이렇게 해 보세요</p>
         <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
           {activeResult.requiredAction === "paste_text"
-            ? "Paste cleaned text if the parser cannot reliably extract the original file."
-            : "Try a replacement PDF, DOCX, or TXT export first, then fall back to pasted text if extraction stays brittle."}
+            ? "원본 파일을 안정적으로 읽지 못한다면 정리된 텍스트를 직접 붙여 넣는 편이 빠릅니다."
+            : "우선 교체 파일을 다시 올려 보고, 계속 불안정하면 텍스트 붙여넣기로 넘어가세요."}
         </p>
       </div>
 
       <form className="mt-5 space-y-4" onSubmit={handleSubmit}>
         <div className="rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 p-4">
-          <p className="text-sm font-semibold">Choose the recovery input</p>
+          <p className="text-sm font-semibold">복구 입력 방식 선택</p>
           <div className="mt-4 flex flex-wrap gap-3 text-sm">
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[color:var(--border)] px-4 py-2">
               <input
@@ -1226,7 +1340,7 @@ function ParserFailureRecovery({ snapshot }: { snapshot: SessionSnapshot }) {
                 className="accent-[color:var(--accent)]"
                 onChange={() => setRecoveryMode("file_upload")}
               />
-              Upload replacement file
+              교체 파일 업로드
             </label>
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[color:var(--border)] px-4 py-2">
               <input
@@ -1238,14 +1352,14 @@ function ParserFailureRecovery({ snapshot }: { snapshot: SessionSnapshot }) {
                 className="accent-[color:var(--accent)]"
                 onChange={() => setRecoveryMode("pasted_text")}
               />
-              Paste cleaned text
+              정리된 텍스트 붙여넣기
             </label>
           </div>
         </div>
 
         {recoveryMode === "file_upload" ? (
           <label className="block">
-            <span className="text-sm font-semibold">Replacement resume file</span>
+            <span className="text-sm font-semibold">교체할 이력서 파일</span>
             <input
               type="file"
               accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
@@ -1254,22 +1368,22 @@ function ParserFailureRecovery({ snapshot }: { snapshot: SessionSnapshot }) {
               onChange={(event) => setResumeFile(event.target.files?.[0] ?? null)}
             />
             <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
-              Upload a cleaner PDF, DOCX, or TXT file. Limit: 8MB.
+              더 깨끗한 PDF, DOCX, TXT 파일을 올려 주세요. 최대 8MB입니다.
             </p>
           </label>
         ) : (
           <label className="block">
-            <span className="text-sm font-semibold">Clean resume text</span>
+            <span className="text-sm font-semibold">정리된 이력서 텍스트</span>
             <textarea
               value={resumeText}
               maxLength={recoveryResumeTextMaxLength}
               disabled={isSubmitting}
               onChange={(event) => setResumeText(event.target.value)}
-              placeholder="Paste the plain-text version of the resume, including responsibilities, tools, domains, and outcomes."
+              placeholder="업무 범위, 사용 도구, 산업 맥락, 성과가 드러나도록 텍스트 버전을 붙여 넣어 주세요."
               className="mt-2 min-h-32 w-full rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-[color:var(--accent)]"
             />
             <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
-              {resumeText.length}/{recoveryResumeTextMaxLength} characters
+              {resumeText.length}/{recoveryResumeTextMaxLength}자
             </p>
           </label>
         )}
@@ -1285,13 +1399,13 @@ function ParserFailureRecovery({ snapshot }: { snapshot: SessionSnapshot }) {
             className="rounded-full bg-[color:var(--accent)] px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isSubmitting
-              ? "Starting recovery..."
+              ? "복구 실행 시작 중..."
               : recoveryMode === "file_upload"
-                ? "Retry with replacement file"
-                : "Retry with pasted text"}
+                ? "교체 파일로 다시 실행"
+                : "텍스트로 다시 실행"}
           </button>
           <p className="text-sm text-[color:var(--muted-foreground)]">
-            The new session will preserve a link back to this parser-failure attempt.
+            새 결과에는 이 파일 읽기 실패 시도와의 연결 정보가 그대로 남습니다.
           </p>
         </div>
       </form>
@@ -1339,7 +1453,7 @@ function SessionFeedback({
     event.preventDefault();
 
     if (!selectedSentiment) {
-      setSubmissionError("Choose whether the session outcome was helpful.");
+      setSubmissionError("이번 결과가 도움이 되었는지 먼저 선택해 주세요.");
       return;
     }
 
@@ -1363,13 +1477,13 @@ function SessionFeedback({
         | null;
 
       if (!response.ok) {
-        setSubmissionError(payload?.message ?? "Failed to save feedback.");
+        setSubmissionError(payload?.message ?? "피드백을 저장하지 못했습니다.");
         return;
       }
 
       await onRefresh();
     } catch {
-      setSubmissionError("Failed to save feedback.");
+      setSubmissionError("피드백을 저장하지 못했습니다.");
     } finally {
       setIsSubmitting(false);
     }
@@ -1380,12 +1494,11 @@ function SessionFeedback({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-            Session feedback
+            결과 피드백
           </p>
-          <h2 className="mt-3 text-2xl font-semibold">Was this outcome useful?</h2>
+          <h2 className="mt-3 text-2xl font-semibold">이번 결과가 실제로 도움이 되었나요?</h2>
           <p className="mt-2 max-w-2xl text-sm leading-7 text-[color:var(--muted-foreground)]">
-            Save one operator-visible feedback state per terminal session. Resubmitting
-            replaces the previous sentiment and note.
+            결과가 나온 항목마다 최신 피드백 1개를 저장할 수 있고, 다시 저장하면 이전 내용이 교체됩니다.
           </p>
         </div>
         {savedFeedback ? (
@@ -1394,7 +1507,7 @@ function SessionFeedback({
           </div>
         ) : (
           <div className="rounded-full border border-[color:var(--border)] px-4 py-2 text-sm">
-            Not captured yet
+            아직 저장되지 않음
           </div>
         )}
       </div>
@@ -1402,16 +1515,16 @@ function SessionFeedback({
       {savedFeedback ? (
         <div className="mt-5 rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 p-4">
           <p className="text-sm font-semibold">
-            Saved {feedbackSentimentLabel(savedFeedback.sentiment).toLowerCase()} feedback
+            저장된 피드백: {feedbackSentimentLabel(savedFeedback.sentiment)}
           </p>
           <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-            Updated {formatSessionDate(savedFeedback.updatedAt)}
+            업데이트 {formatSessionDate(savedFeedback.updatedAt)}
           </p>
           {savedFeedback.note ? (
             <p className="mt-3 text-sm leading-7">{savedFeedback.note}</p>
           ) : (
             <p className="mt-3 text-sm text-[color:var(--muted-foreground)]">
-              No note was attached to the current feedback state.
+              메모는 함께 저장되지 않았습니다.
             </p>
           )}
         </div>
@@ -1441,17 +1554,17 @@ function SessionFeedback({
         </div>
 
         <label className="block">
-          <span className="text-sm font-semibold">Optional note</span>
+          <span className="text-sm font-semibold">메모 남기기</span>
           <textarea
             value={note}
             maxLength={500}
             disabled={isSubmitting}
             onChange={(event) => setNote(event.target.value)}
-            placeholder="Capture why this felt useful or where the recommendation missed."
+            placeholder="어떤 점이 도움이 되었는지, 또는 어디가 아쉬웠는지 간단히 적어 주세요."
             className="mt-2 min-h-28 w-full rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-[color:var(--accent)]"
           />
           <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
-            {note.length}/500 characters
+            {note.length}/500자
           </p>
         </label>
 
@@ -1467,14 +1580,14 @@ function SessionFeedback({
           >
             {isSubmitting
               ? savedFeedback
-                ? "Updating feedback..."
-                : "Saving feedback..."
+                ? "피드백 업데이트 중..."
+                : "피드백 저장 중..."
               : savedFeedback
-                ? "Update feedback"
-                : "Save feedback"}
+                ? "피드백 수정"
+                : "피드백 저장"}
           </button>
           <p className="text-sm text-[color:var(--muted-foreground)]">
-            The latest submission is what the session page will show after refresh.
+            새로고침하면 가장 최근에 저장한 피드백 상태가 반영됩니다.
           </p>
         </div>
       </form>
@@ -1528,9 +1641,9 @@ export function SessionView({ initialSnapshot }: { initialSnapshot: SessionSnaps
 
       {!isTerminal ? (
         <div className="rounded-[2rem] border border-[color:var(--border)] bg-[color:var(--panel)] p-6">
-          <h2 className="text-lg font-semibold">Worker is still processing</h2>
+          <h2 className="text-lg font-semibold">아직 결과를 만드는 중입니다</h2>
           <p className="mt-2 max-w-2xl text-sm leading-7 text-[color:var(--muted-foreground)]">
-            Keep this page open while the session moves through queue, parsing, profile extraction, and recommendation states. Local development requires both `npm run dev` and `npm run worker:dev`.
+            대기, 읽기, 프로필 정리, 추천 생성 단계를 지나면서 이 화면이 자동으로 갱신됩니다. 로컬 개발에서는 `npm run dev`와 `npm run worker:dev`가 모두 필요합니다.
           </p>
         </div>
       ) : null}
@@ -1552,19 +1665,19 @@ export function SessionView({ initialSnapshot }: { initialSnapshot: SessionSnaps
           href="/sessions"
           className="rounded-full border border-[color:var(--border)] px-4 py-2 transition hover:bg-white/70"
         >
-          Review recent sessions
+          최근 결과 보기
         </Link>
         <Link
           href="/"
           className="rounded-full border border-[color:var(--border)] px-4 py-2 transition hover:bg-white/70"
         >
-          Start another session
+          새 이력서로 시작
         </Link>
         <a
           href="/api/health"
           className="rounded-full border border-[color:var(--border)] px-4 py-2 transition hover:bg-white/70"
         >
-          Check health
+          시스템 상태 보기
         </a>
       </div>
     </div>

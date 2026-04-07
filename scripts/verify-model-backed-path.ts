@@ -45,7 +45,7 @@ async function main() {
 
   if (result.metadata.recommendationPath !== "model_backed") {
     console.error(
-      "Expected the verification fixture to reach the model-backed path. Check the OpenAI env vars and worker logs.",
+      "Expected the verification fixture to reach the model-backed path. Check the codex-local or OpenAI recommendation env vars and worker logs.",
     );
     process.exit(1);
   }

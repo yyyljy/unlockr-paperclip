@@ -1,4 +1,5 @@
-import { extractSentenceFragments, type NormalizedAnalysisInput } from "@/lib/resume-intake";
+﻿import { extractSentenceFragments, type NormalizedAnalysisInput } from "@/lib/resume-intake";
+import { matchesAnyKeyword } from "@/lib/keyword-matching";
 import { roleTracks } from "@/lib/recommendation-taxonomy";
 
 export type CandidateProfileConfidence = "high" | "medium" | "low";
@@ -49,8 +50,11 @@ const educationPattern =
 const certificationPattern =
   /\b(certification|certificate|license|licensed|award|credential|자격증|수상|인증)\b/i;
 
-const achievementPattern =
-  /\b(\d+[%x]?|improved|reduced|increased|grew|scaled|launched|shipped|delivered|saved|automated|cut|boosted|won|led|향상|개선|감소|증가|출시)\b/i;
+const achievementVerbPattern =
+  /\b(improved|reduced|increased|grew|scaled|launched|shipped|delivered|saved|automated|cut|boosted|won|led|built|implemented|optimized|streamlined|migrated|achieved)\b/i;
+
+const achievementMetricPattern =
+  /\b\d+(?:[.,]\d+)?\s?(?:%|x|배|명|건|회|시간|분|초|일|주|개월|달|년|users?|customers?|hours?|days?|weeks?|months?)\b/i;
 
 const skillVocabulary = [
   "react",
@@ -184,11 +188,31 @@ function findKeywordEvidence(input: {
   max?: number;
 }) {
   return input.fragments
-    .filter((fragment) =>
-      input.keywords.some((keyword) => normalize(fragment.text).includes(normalize(keyword))),
-    )
+    .filter((fragment) => matchesAnyKeyword(fragment.text, input.keywords))
     .slice(0, input.max ?? 2)
     .map((fragment) => toEvidence(fragment, input.sourceKind, input.reason));
+}
+
+function isDateLikeFragment(value: string) {
+  const compact = value.replace(/\s+/g, "");
+
+  return /^(?:\d{1,4}[./~-]?)+\d{0,4}\.?$/.test(compact) && !/[\p{L}]/u.test(value);
+}
+
+function isAchievementFragment(fragment: SentenceFragment) {
+  const value = fragment.text.trim();
+  const alphabeticChars = value.match(/[\p{L}]/gu)?.length ?? 0;
+  const tokenCount = value.split(/\s+/).filter(Boolean).length;
+
+  if (value.length < 24 || alphabeticChars < 6 || tokenCount < 3) {
+    return false;
+  }
+
+  if (isDateLikeFragment(value)) {
+    return false;
+  }
+
+  return achievementVerbPattern.test(value) || achievementMetricPattern.test(value);
 }
 
 export function extractCandidateProfile(
@@ -338,7 +362,7 @@ export function extractCandidateProfile(
     .slice(0, 4);
 
   const achievements = dedupeByValue(
-    experienceFragments.filter((fragment) => achievementPattern.test(fragment.text)),
+    experienceFragments.filter((fragment) => isAchievementFragment(fragment)),
     (fragment) => fragment.text,
   )
     .slice(0, 4)
@@ -448,3 +472,4 @@ export function extractCandidateProfile(
     coverageNotes,
   } satisfies CandidateProfile;
 }
+

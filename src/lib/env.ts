@@ -1,5 +1,17 @@
 import { z } from "zod";
 
+const optionalNonEmptyString = z.preprocess(
+  (value) => {
+    if (typeof value !== "string") {
+      return value;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length === 0 ? undefined : trimmed;
+  },
+  z.string().min(1).optional(),
+);
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   NEXT_PUBLIC_APP_URL: z.url(),
@@ -20,11 +32,22 @@ const envSchema = z.object({
   RECOMMENDATION_MODEL_VERSION: z.string().min(1),
   RECOMMENDATION_PROMPT_VERSION: z.string().min(1),
   RECOMMENDATION_TAXONOMY_VERSION: z.string().min(1),
-  OPENAI_API_KEY: z.string().min(1).optional(),
+  OPENAI_API_KEY: optionalNonEmptyString,
   OPENAI_BASE_URL: z.url().default("https://api.openai.com/v1"),
-  OPENAI_RECOMMENDATION_MODEL: z.string().min(1).optional(),
-  OPENAI_RECOMMENDATION_PROMPT_VERSION: z.string().min(1).optional(),
+  OPENAI_RECOMMENDATION_MODEL: optionalNonEmptyString,
+  OPENAI_RECOMMENDATION_PROMPT_VERSION: optionalNonEmptyString,
   OPENAI_RECOMMENDATION_TIMEOUT_MS: z.coerce.number().int().positive().default(20000),
+  CODEX_RECOMMENDATION_ENABLED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
+  CODEX_RECOMMENDATION_CLI_PATH: z.string().min(1).default("codex"),
+  CODEX_RECOMMENDATION_MODEL: optionalNonEmptyString,
+  CODEX_RECOMMENDATION_PROMPT_VERSION: z
+    .string()
+    .min(1)
+    .default("phase2-codex-local-v1"),
+  CODEX_RECOMMENDATION_TIMEOUT_MS: z.coerce.number().int().positive().default(180000),
 });
 
 export type ServerEnv = z.infer<typeof envSchema>;
@@ -53,6 +76,12 @@ export function getServerEnv() {
     OPENAI_RECOMMENDATION_PROMPT_VERSION:
       process.env.OPENAI_RECOMMENDATION_PROMPT_VERSION,
     OPENAI_RECOMMENDATION_TIMEOUT_MS: process.env.OPENAI_RECOMMENDATION_TIMEOUT_MS,
+    CODEX_RECOMMENDATION_ENABLED: process.env.CODEX_RECOMMENDATION_ENABLED,
+    CODEX_RECOMMENDATION_CLI_PATH: process.env.CODEX_RECOMMENDATION_CLI_PATH,
+    CODEX_RECOMMENDATION_MODEL: process.env.CODEX_RECOMMENDATION_MODEL,
+    CODEX_RECOMMENDATION_PROMPT_VERSION:
+      process.env.CODEX_RECOMMENDATION_PROMPT_VERSION,
+    CODEX_RECOMMENDATION_TIMEOUT_MS: process.env.CODEX_RECOMMENDATION_TIMEOUT_MS,
   });
 }
 
@@ -80,6 +109,12 @@ export function getServerEnvStatus() {
     OPENAI_RECOMMENDATION_PROMPT_VERSION:
       process.env.OPENAI_RECOMMENDATION_PROMPT_VERSION,
     OPENAI_RECOMMENDATION_TIMEOUT_MS: process.env.OPENAI_RECOMMENDATION_TIMEOUT_MS,
+    CODEX_RECOMMENDATION_ENABLED: process.env.CODEX_RECOMMENDATION_ENABLED,
+    CODEX_RECOMMENDATION_CLI_PATH: process.env.CODEX_RECOMMENDATION_CLI_PATH,
+    CODEX_RECOMMENDATION_MODEL: process.env.CODEX_RECOMMENDATION_MODEL,
+    CODEX_RECOMMENDATION_PROMPT_VERSION:
+      process.env.CODEX_RECOMMENDATION_PROMPT_VERSION,
+    CODEX_RECOMMENDATION_TIMEOUT_MS: process.env.CODEX_RECOMMENDATION_TIMEOUT_MS,
   });
 
   if (parsed.success) {

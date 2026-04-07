@@ -1,9 +1,16 @@
+import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
 import { z } from "zod";
 
 import type { CandidateProfile } from "@/lib/candidate-profile";
-import { analysisResultSchema } from "@/lib/contracts/recommendations";
+import {
+  analysisResultSchema,
+  type AnalysisResult,
+} from "@/lib/contracts/recommendations";
 import type { ServerEnv } from "@/lib/env";
 import { getServerEnv } from "@/lib/env";
 import type { NormalizedAnalysisInput } from "@/lib/resume-intake";
@@ -15,6 +22,38 @@ type OpenAiRecommendationConfig = {
   model: string;
   promptVersion: string;
   timeoutMs: number;
+};
+
+type CodexLocalRecommendationConfig = {
+  cliPath: string;
+  model: string | null;
+  promptVersion: string;
+  timeoutMs: number;
+};
+
+type ModelIdentity = {
+  provider: string;
+  version: string;
+  promptVersion: string;
+};
+
+type ModelBackedRecommendationAdapter = {
+  identity: ModelIdentity;
+  request: (input: {
+    analysisInput: NormalizedAnalysisInput;
+    profile: CandidateProfile;
+    evidenceCatalog: EvidenceOption[];
+  }) => Promise<unknown>;
+};
+
+type FallbackPathContext = {
+  status: "fallback_timeout" | "fallback_error";
+  attemptedProvider: string | null;
+};
+
+type ModelBackedRecommendationOutcome = {
+  result: AnalysisResult | null;
+  fallbackPathContext: FallbackPathContext | null;
 };
 
 type EvidenceOption = {
@@ -34,6 +73,23 @@ const modelRoleTitles = roleTracks.map((track) => track.roleTitle) as [
   ...string[],
 ];
 
+const maxModelRecommendations = 5;
+const maxModelDetectedExperienceItems = 8;
+const maxModelInferredPotentialItems = 6;
+const maxModelEvidenceKeys = 8;
+const maxModelRisks = 5;
+const maxModelBlockingFindings = 6;
+const maxModelPartialSignals = 6;
+const maxModelFollowUpQuestions = 8;
+const maxContractRecommendations = 3;
+const maxContractDetectedExperienceItems = 5;
+const maxContractInferredPotentialItems = 4;
+const maxContractEvidenceItems = 3;
+const maxContractRisks = 3;
+const maxContractBlockingFindings = 4;
+const maxContractPartialSignals = 4;
+const maxContractFollowUpQuestions = 5;
+
 const readyModelOutputSchema = z.object({
   status: z.literal("ready"),
   summary: z.object({
@@ -49,29 +105,60 @@ const readyModelOutputSchema = z.object({
         score: z.number().min(0).max(1),
         explanation: z.string().min(1),
       }),
-      detectedExperience: z.array(z.string().min(1)).min(1).max(5),
-      inferredPotential: z.array(z.string().min(1)).min(1).max(4),
+      detectedExperience: z.array(z.string().min(1)).min(1).max(maxModelDetectedExperienceItems),
+      inferredPotential: z.array(z.string().min(1)).min(1).max(maxModelInferredPotentialItems),
       rationale: z.string().min(1),
-      evidenceKeys: z.array(z.string().min(1)).min(1).max(3),
-      risks: z.array(z.string().min(1)).max(3).default([]),
+      evidenceKeys: z.array(z.string().min(1)).min(1).max(maxModelEvidenceKeys),
+      risks: z.array(z.string().min(1)).max(maxModelRisks).default([]),
     }),
   )
     .min(1)
-    .max(3),
+    .max(maxModelRecommendations),
 });
 
 const insufficientEvidenceModelOutputSchema = z.object({
   status: z.literal("insufficient_evidence"),
-  blockingFindings: z.array(z.string().min(1)).min(1).max(4),
-  partialSignals: z.array(z.string().min(1)).max(4),
-  followUpQuestions: z.array(z.string().min(1)).min(1).max(5),
+  blockingFindings: z.array(z.string().min(1)).min(1).max(maxModelBlockingFindings),
+  partialSignals: z.array(z.string().min(1)).max(maxModelPartialSignals),
+  followUpQuestions: z.array(z.string().min(1)).min(1).max(maxModelFollowUpQuestions),
   userMessage: z.string().min(1),
 });
 
-const modelOutputSchema = z.discriminatedUnion("status", [
+export const modelOutputSchema = z.discriminatedUnion("status", [
   readyModelOutputSchema,
   insufficientEvidenceModelOutputSchema,
 ]);
+
+type ParsedModelOutput = z.infer<typeof modelOutputSchema>;
+
+export function normalizeParsedModelOutput(output: ParsedModelOutput): ParsedModelOutput {
+  if (output.status === "ready") {
+    return {
+      ...output,
+      recommendations: output.recommendations
+        .slice(0, maxContractRecommendations)
+        .map((recommendation) => ({
+          ...recommendation,
+          detectedExperience: recommendation.detectedExperience.slice(
+            0,
+            maxContractDetectedExperienceItems,
+          ),
+          inferredPotential: recommendation.inferredPotential.slice(
+            0,
+            maxContractInferredPotentialItems,
+          ),
+          risks: recommendation.risks.slice(0, maxContractRisks),
+        })),
+    };
+  }
+
+  return {
+    ...output,
+    blockingFindings: output.blockingFindings.slice(0, maxContractBlockingFindings),
+    partialSignals: output.partialSignals.slice(0, maxContractPartialSignals),
+    followUpQuestions: output.followUpQuestions.slice(0, maxContractFollowUpQuestions),
+  };
+}
 
 function collectProfileSignals(profile: CandidateProfile) {
   return [
@@ -107,6 +194,21 @@ function getOpenAiRecommendationConfig(
     model: env.OPENAI_RECOMMENDATION_MODEL,
     promptVersion: env.OPENAI_RECOMMENDATION_PROMPT_VERSION,
     timeoutMs: env.OPENAI_RECOMMENDATION_TIMEOUT_MS,
+  };
+}
+
+function getCodexLocalRecommendationConfig(
+  env: ServerEnv,
+): CodexLocalRecommendationConfig | null {
+  if (!env.CODEX_RECOMMENDATION_ENABLED) {
+    return null;
+  }
+
+  return {
+    cliPath: env.CODEX_RECOMMENDATION_CLI_PATH,
+    model: env.CODEX_RECOMMENDATION_MODEL ?? null,
+    promptVersion: env.CODEX_RECOMMENDATION_PROMPT_VERSION,
+    timeoutMs: env.CODEX_RECOMMENDATION_TIMEOUT_MS,
   };
 }
 
@@ -172,6 +274,8 @@ function buildSystemPrompt() {
     "Never invent resume facts, snippets, sections, or tools.",
     "Only cite evidence keys from the provided evidence catalog.",
     "If the evidence is thin, return status insufficient_evidence instead of stretching into a polished guess.",
+    "Do not inspect files, browse the workspace, or use external tools.",
+    "Use only the parsed input included in the prompt.",
     "Return valid JSON only.",
   ].join(" ");
 }
@@ -195,6 +299,9 @@ function buildUserPrompt(input: {
     "Choose only from the allowed role titles in the taxonomy.",
     "If you return ready, include 1 to 3 unique recommendations.",
     "Use evidenceKeys to cite exact evidence items from the catalog.",
+    "For ready outputs, keep detectedExperience at 5 items or fewer, inferredPotential at 4 or fewer, evidenceKeys at 3 or fewer, and risks at 3 or fewer.",
+    "For insufficient_evidence outputs, keep blockingFindings at 4 items or fewer, partialSignals at 4 or fewer, and followUpQuestions at 5 or fewer.",
+    "If you have more candidate items than allowed, keep only the strongest and most specific ones.",
     "Do not output parser_failure. That state is handled upstream.",
     "JSON contract for ready:",
     JSON.stringify({
@@ -257,6 +364,25 @@ function buildUserPrompt(input: {
       },
       evidenceCatalog: input.evidenceCatalog,
     }),
+  ].join("\n\n");
+}
+
+function buildCodexExecPrompt(input: {
+  analysisInput: NormalizedAnalysisInput;
+  profile: CandidateProfile;
+  evidenceCatalog: EvidenceOption[];
+  promptVersion: string;
+}) {
+  return [
+    "System instructions:",
+    buildSystemPrompt(),
+    "Runtime constraints:",
+    "- Do not run shell commands.",
+    "- Do not inspect the filesystem or repository.",
+    "- Use only the parsed input below.",
+    "- Return only the final JSON object.",
+    "Task:",
+    buildUserPrompt(input),
   ].join("\n\n");
 }
 
@@ -325,6 +451,150 @@ async function requestOpenAiRecommendation(input: {
   }
 }
 
+function appendLimitedOutput(existing: string, chunk: Buffer | string, limit = 12000) {
+  const next = `${existing}${chunk.toString()}`;
+  return next.length > limit ? next.slice(-limit) : next;
+}
+
+function prependExecDirToPath(env: NodeJS.ProcessEnv) {
+  const execDir = path.dirname(process.execPath);
+  const pathKey = Object.keys(env).find((key) => key.toLowerCase() === "path") ?? "PATH";
+  const existingPath = env[pathKey];
+  const segments = existingPath ? existingPath.split(path.delimiter).filter(Boolean) : [];
+
+  if (!segments.includes(execDir)) {
+    segments.unshift(execDir);
+  }
+
+  env[pathKey] = segments.join(path.delimiter);
+}
+
+function buildCodexCliEnv() {
+  const childEnv = { ...process.env };
+
+  delete childEnv.OPENAI_API_KEY;
+  delete childEnv.OPENAI_BASE_URL;
+  delete childEnv.OPENAI_ORG_ID;
+  delete childEnv.OPENAI_ORGANIZATION;
+  delete childEnv.OPENAI_PROJECT;
+  delete childEnv.OPENAI_PROJECT_ID;
+  prependExecDirToPath(childEnv);
+
+  return childEnv;
+}
+
+async function requestCodexLocalRecommendation(input: {
+  config: CodexLocalRecommendationConfig;
+  analysisInput: NormalizedAnalysisInput;
+  profile: CandidateProfile;
+  evidenceCatalog: EvidenceOption[];
+}) {
+  const workingDir = await mkdtemp(path.join(tmpdir(), "unlockr-codex-local-"));
+  const outputPath = path.join(workingDir, "output.json");
+
+  try {
+    const args = [
+      "exec",
+      "--skip-git-repo-check",
+      "--sandbox",
+      "read-only",
+      "--color",
+      "never",
+      "--ephemeral",
+      "-o",
+      outputPath,
+    ];
+
+    if (input.config.model) {
+      args.push("--model", input.config.model);
+    }
+
+    args.push("-");
+
+    const child = spawn(input.config.cliPath, args, {
+      cwd: workingDir,
+      env: buildCodexCliEnv(),
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+
+    child.stdout.on("data", (chunk) => {
+      stdout = appendLimitedOutput(stdout, chunk);
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr = appendLimitedOutput(stderr, chunk);
+    });
+    child.stdin.on("error", () => {
+      // Ignore EPIPE if the process exits before reading the full prompt.
+    });
+
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGTERM");
+
+      const forceKill = setTimeout(() => {
+        child.kill("SIGKILL");
+      }, 2000);
+      forceKill.unref();
+    }, input.config.timeoutMs);
+    timeout.unref();
+
+    const completion = new Promise<{
+      exitCode: number | null;
+      signal: NodeJS.Signals | null;
+    }>((resolve, reject) => {
+      child.once("error", reject);
+      child.once("close", (exitCode, signal) => {
+        resolve({ exitCode, signal });
+      });
+    });
+
+    child.stdin.end(
+      buildCodexExecPrompt({
+        analysisInput: input.analysisInput,
+        profile: input.profile,
+        evidenceCatalog: input.evidenceCatalog,
+        promptVersion: input.config.promptVersion,
+      }),
+    );
+
+    const { exitCode, signal } = await completion;
+    clearTimeout(timeout);
+
+    if (timedOut) {
+      throw new Error(
+        `codex-local recommendation request timed out after ${input.config.timeoutMs}ms.`,
+      );
+    }
+
+    if (exitCode !== 0) {
+      throw new Error(
+        [
+          `codex-local recommendation request failed with exit code ${exitCode ?? "null"}`,
+          signal ? `(signal ${signal})` : "",
+          stdout ? `stdout tail: ${stdout}` : "",
+          stderr ? `stderr tail: ${stderr}` : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
+      );
+    }
+
+    const messageContent = (await readFile(outputPath, "utf8")).trim();
+
+    if (messageContent.length === 0) {
+      throw new Error("codex-local recommendation response did not include JSON content.");
+    }
+
+    return JSON.parse(messageContent);
+  } finally {
+    await rm(workingDir, { recursive: true, force: true });
+  }
+}
+
 function resolveEvidenceSelection(input: {
   recommendation: z.infer<typeof readyModelOutputSchema>["recommendations"][number];
   evidenceCatalog: EvidenceOption[];
@@ -352,6 +622,10 @@ function resolveEvidenceSelection(input: {
       startOffset: entry.startOffset,
       endOffset: entry.endOffset,
     });
+
+    if (evidence.length >= maxContractEvidenceItems) {
+      return evidence;
+    }
   }
 
   return evidence;
@@ -361,7 +635,7 @@ function buildReadyResultFromModel(input: {
   output: z.infer<typeof readyModelOutputSchema>;
   analysisInput: NormalizedAnalysisInput;
   evidenceCatalog: EvidenceOption[];
-  config: OpenAiRecommendationConfig;
+  modelIdentity: ModelIdentity;
   env: ServerEnv;
 }) {
   const tracksByTitle = new Map(
@@ -421,11 +695,15 @@ function buildReadyResultFromModel(input: {
       taxonomyVersion: input.env.RECOMMENDATION_TAXONOMY_VERSION,
       generatedAt: new Date().toISOString(),
       recommendationPath: "model_backed",
+      pathContext: {
+        status: "accepted_model",
+        attemptedProvider: input.modelIdentity.provider,
+      },
       parser: input.analysisInput.document.parser,
       model: {
-        provider: "openai",
-        version: input.config.model,
-        promptVersion: input.config.promptVersion,
+        provider: input.modelIdentity.provider,
+        version: input.modelIdentity.version,
+        promptVersion: input.modelIdentity.promptVersion,
       },
     },
     summary: input.output.summary,
@@ -436,7 +714,7 @@ function buildReadyResultFromModel(input: {
 function buildInsufficientEvidenceResultFromModel(input: {
   output: z.infer<typeof insufficientEvidenceModelOutputSchema>;
   analysisInput: NormalizedAnalysisInput;
-  config: OpenAiRecommendationConfig;
+  modelIdentity: ModelIdentity;
   env: ServerEnv;
 }) {
   return analysisResultSchema.parse({
@@ -446,11 +724,15 @@ function buildInsufficientEvidenceResultFromModel(input: {
       taxonomyVersion: input.env.RECOMMENDATION_TAXONOMY_VERSION,
       generatedAt: new Date().toISOString(),
       recommendationPath: "model_backed",
+      pathContext: {
+        status: "accepted_model",
+        attemptedProvider: input.modelIdentity.provider,
+      },
       parser: input.analysisInput.document.parser,
       model: {
-        provider: "openai",
-        version: input.config.model,
-        promptVersion: input.config.promptVersion,
+        provider: input.modelIdentity.provider,
+        version: input.modelIdentity.version,
+        promptVersion: input.modelIdentity.promptVersion,
       },
     },
     blockingFindings: input.output.blockingFindings,
@@ -460,15 +742,56 @@ function buildInsufficientEvidenceResultFromModel(input: {
   });
 }
 
+function buildRecommendationAdapters(env: ServerEnv): ModelBackedRecommendationAdapter[] {
+  const adapters: ModelBackedRecommendationAdapter[] = [];
+  const codexLocalConfig = getCodexLocalRecommendationConfig(env);
+  const openAiConfig = getOpenAiRecommendationConfig(env);
+
+  if (codexLocalConfig) {
+    adapters.push({
+      identity: {
+        provider: "codex-local",
+        version: codexLocalConfig.model ?? "cli-default",
+        promptVersion: codexLocalConfig.promptVersion,
+      },
+      request: (input) =>
+        requestCodexLocalRecommendation({
+          config: codexLocalConfig,
+          ...input,
+        }),
+    });
+  }
+
+  if (openAiConfig) {
+    adapters.push({
+      identity: {
+        provider: "openai",
+        version: openAiConfig.model,
+        promptVersion: openAiConfig.promptVersion,
+      },
+      request: (input) =>
+        requestOpenAiRecommendation({
+          config: openAiConfig,
+          ...input,
+        }),
+    });
+  }
+
+  return adapters;
+}
+
 export async function analyzeResumeInputWithModel(input: {
   analysisInput: NormalizedAnalysisInput;
   profile: CandidateProfile;
-}) {
+}): Promise<ModelBackedRecommendationOutcome> {
   const env = getServerEnv();
-  const config = getOpenAiRecommendationConfig(env);
+  const adapters = buildRecommendationAdapters(env);
 
-  if (!config) {
-    return null;
+  if (adapters.length === 0) {
+    return {
+      result: null,
+      fallbackPathContext: null,
+    };
   }
 
   const evidenceCatalog = collectEvidenceCatalog(input.profile);
@@ -480,39 +803,77 @@ export async function analyzeResumeInputWithModel(input: {
       evidenceCatalog,
     })
   ) {
-    return null;
+    return {
+      result: null,
+      fallbackPathContext: null,
+    };
   }
 
-  try {
-    const rawOutput = await requestOpenAiRecommendation({
-      config,
-      analysisInput: input.analysisInput,
-      profile: input.profile,
-      evidenceCatalog,
-    });
-    const parsedOutput = modelOutputSchema.parse(rawOutput);
+  let fallbackPathContext: FallbackPathContext | null = null;
+  let timeoutFallbackContext: FallbackPathContext | null = null;
 
-    if (parsedOutput.status === "ready") {
-      return buildReadyResultFromModel({
-        output: parsedOutput,
+  for (const [index, adapter] of adapters.entries()) {
+    try {
+      const rawOutput = await adapter.request({
         analysisInput: input.analysisInput,
+        profile: input.profile,
         evidenceCatalog,
-        config,
-        env,
       });
-    }
+      const parsedOutput = normalizeParsedModelOutput(modelOutputSchema.parse(rawOutput));
 
-    return buildInsufficientEvidenceResultFromModel({
-      output: parsedOutput,
-      analysisInput: input.analysisInput,
-      config,
-      env,
-    });
-  } catch (error) {
-    console.warn(
-      "OpenAI recommendation adapter failed; using fallback rules engine instead.",
-      error,
-    );
-    return null;
+      if (parsedOutput.status === "ready") {
+        return {
+          result: buildReadyResultFromModel({
+            output: parsedOutput,
+            analysisInput: input.analysisInput,
+            evidenceCatalog,
+            modelIdentity: adapter.identity,
+            env,
+          }),
+          fallbackPathContext: null,
+        };
+      }
+
+      return {
+        result: buildInsufficientEvidenceResultFromModel({
+          output: parsedOutput,
+          analysisInput: input.analysisInput,
+          modelIdentity: adapter.identity,
+          env,
+        }),
+        fallbackPathContext: null,
+      };
+    } catch (error) {
+      const currentFallbackPathContext = {
+        status:
+          error instanceof Error && /timed out/i.test(error.message)
+            ? "fallback_timeout"
+            : "fallback_error",
+        attemptedProvider: adapter.identity.provider,
+      } satisfies FallbackPathContext;
+
+      fallbackPathContext = currentFallbackPathContext;
+
+      if (currentFallbackPathContext.status === "fallback_timeout") {
+        timeoutFallbackContext = currentFallbackPathContext;
+      }
+
+      const fallbackMessage =
+        index === adapters.length - 1
+          ? "using fallback rules engine instead."
+          : "trying the next adapter.";
+
+      console.warn(
+        `${adapter.identity.provider} recommendation adapter failed; ${fallbackMessage}`,
+        error,
+      );
+    }
   }
+
+  return {
+    result: null,
+    fallbackPathContext: timeoutFallbackContext ?? fallbackPathContext,
+  };
 }
+
+

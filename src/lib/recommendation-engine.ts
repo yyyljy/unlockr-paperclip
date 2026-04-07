@@ -8,11 +8,14 @@ export async function generateRecommendationResult(input: {
   analysisInput: NormalizedAnalysisInput;
   profile: CandidateProfile;
 }): Promise<AnalysisResult> {
-  const modelResult = await analyzeResumeInputWithModel(input);
+  const modelOutcome = await analyzeResumeInputWithModel(input);
 
-  if (modelResult) {
-    return modelResult;
+  if (modelOutcome.result) {
+    return modelOutcome.result;
   }
 
-  return analyzeResumeInput(input);
+  return analyzeResumeInput({
+    ...input,
+    pathContext: modelOutcome.fallbackPathContext,
+  });
 }

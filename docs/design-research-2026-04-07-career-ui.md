@@ -192,6 +192,84 @@ Priority order for the current product:
 5. Restructure session detail pages so decision-making content appears before process metadata.
 6. Introduce a calmer pastel extension to the current palette for confidence, evidence, and recovery states.
 
+## Phase 1 Screen Brief
+
+This section translates the research into concrete changes for the current codebase without expanding scope into a full redesign.
+
+### Home page (`src/app/page.tsx`)
+
+Keep:
+
+- The warm tone and trust language around evidence, risks, and next steps.
+- The two-column hero with the intake form visible above the fold.
+
+Change:
+
+- Replace the raw contract preview with a sample result surface that looks like a real candidate outcome.
+- Add a lightweight role-family strip before the intake form or directly below the hero. Example buckets: Product, Operations, Customer Success, Data, Design.
+- Reduce product-internal language such as "session" and "recommendation contract" on the first screen.
+
+Why:
+
+- Teal and roadmap.sh both reduce anxiety by letting users orient around recognizable paths before they commit input.
+- Jobscan succeeds because the user can infer the flow immediately: submit, diagnose, improve.
+
+### Intake flow (`src/components/intake-form.tsx`)
+
+Keep:
+
+- The explicit step framing.
+- The dual source path for pasted text and file upload.
+
+Change:
+
+- Shorten each source option to one line of benefit and one line of support text.
+- Add one expectation row above the source selector: time to first result, accepted sources, and when follow-up questions appear.
+- Replace repeated helper copy with one short "what improves accuracy" checklist: responsibilities, tools, domain, measurable outcomes.
+
+Why:
+
+- The current flow is usable, but the copy density makes the simple first decision feel higher stakes than it should.
+- Indeed and career-guide products use lightweight educational framing before asking for effort.
+
+### Session detail (`src/components/session-view.tsx`)
+
+Keep:
+
+- Evidence quality, confidence, gaps, risks, and recovery logic.
+- The existing card structure for recommendation detail.
+
+Change:
+
+- Make the top section answer four questions in this exact order: what Unlockr recommends, why it fits, what is uncertain, what to do next.
+- Move process metadata and recommendation-path labeling below the first recommendation card stack.
+- Convert confidence from a badge-only pattern into a small support model:
+  - Supported by evidence
+  - Needs verification
+  - Missing from source
+
+Why:
+
+- Unlockr's strongest differentiator is trustworthy narrowing. The page should foreground the decision, not the pipeline state.
+- roadmap.sh works because paths are legible. Unlockr should make each recommendation feel like a path, not a report artifact.
+
+### Sessions list (`src/app/sessions/page.tsx`)
+
+Current concern:
+
+- This page is explicitly framed as operator review while the rest of the product reads closer to a candidate-facing guidance flow.
+
+Recommendation:
+
+- Decide whether `/sessions` is truly an internal operations surface or a user-facing history page.
+- If it is internal, make that unmistakable with operator language, tighter utility layout, and less marketing voice.
+- If it is user-facing, rename and restructure it around "Recent career readings" or "Your recent guidance sessions" rather than health snapshots and operator review.
+
+Why:
+
+- Right now it sits between two audiences.
+- Mixed audience framing weakens clarity faster than visual inconsistency does.
+
 ## Visual Direction Recommendation
 
 Suggested direction:
@@ -202,6 +280,40 @@ Suggested direction:
 - Favor clean card groupings, clear headings, and shorter text blocks over large explanatory paragraphs.
 
 This keeps Unlockr differentiated from colder enterprise dashboards and from louder job-search growth products.
+
+### Token extension for current UI
+
+To stay close to the existing palette, expand rather than replace it:
+
+- Cream base for general page background
+- Sand panel for neutral grouped surfaces
+- Sage tint for trustworthy or well-supported states
+- Muted clay for active emphasis and primary CTA
+- Soft rose only for recovery or failure states
+
+This gives evidence, confidence, and recovery states more visual separation without making the interface louder.
+
+## Copy Direction
+
+Use copy that sounds like guided interpretation, not system output.
+
+Prefer:
+
+- "Career direction"
+- "Why this fits"
+- "What is still unclear"
+- "Best next step"
+- "Needs more detail"
+
+Avoid leading with:
+
+- "Session"
+- "Analysis path"
+- "Recommendation contract"
+- "Operator review"
+- "Health check"
+
+The product can still expose those concepts lower in the page when operational context matters.
 
 ## Anti-Patterns To Avoid
 

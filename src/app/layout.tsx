@@ -15,9 +15,9 @@ const ibmPlexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Unlockr Phase 1",
+  title: "Unlockr | 이력서 기반 커리어 방향 찾기",
   description:
-    "Resume intake, parsing, and evidence-grounded career recommendations for Unlockr.",
+    "이력서와 자기소개를 바탕으로 현실적인 커리어 방향, 근거, 부족한 정보, 다음 행동까지 정리해 주는 Unlockr.",
 };
 
 export default function RootLayout({
@@ -27,7 +27,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="ko"
       className={`${notoSansKr.variable} ${ibmPlexMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>

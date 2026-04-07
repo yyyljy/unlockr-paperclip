@@ -88,7 +88,10 @@ This is enough to reproduce a session from source input through stored result me
 1. `scripts/worker.ts` consumes the queue job.
 2. `src/lib/resume-intake.ts` parses direct text or uploaded PDF, DOCX, and TXT files into a normalized document.
 3. `src/lib/candidate-profile.ts` extracts structured profile signals and evidence snippets.
-4. `src/lib/recommendation-engine.ts` attempts the model-backed adapter first and falls back to `src/lib/rule-engine.ts` when the model path is unavailable or invalid.
+4. `src/lib/recommendation-engine.ts` attempts the model-backed adapter first,
+   preferring codex-local when enabled, then falling back to OpenAI if
+   configured, and finally falling back to `src/lib/rule-engine.ts` when no
+   model path is available or valid.
 5. The worker writes result artifacts back to Postgres.
 
 ### Review path
@@ -117,7 +120,12 @@ Verified current limits from this repository:
 - no auth or user account system is present yet
 - no separate CI configuration is present in the repo
 - no automated test suite is present in the repo
-- recommendation generation now supports one OpenAI-backed adapter, but still depends on fallback heuristics when the model path is unavailable or rejected
+- recommendation generation now supports codex-local and OpenAI-backed
+  adapters, but still depends on fallback heuristics when the model path is
+  unavailable or rejected
+- the codex-local path depends on host-level CLI installation and persisted
+  Codex authentication, so deployment hardening is now partly an operator
+  concern instead of being only an app-env concern
 - session review is still operator-oriented and limited to recent-session views, with no search, filters, or bulk actions
 
 ## Recommendation

@@ -12,6 +12,13 @@ const metadataSchema = z.object({
   taxonomyVersion: z.string().min(1),
   generatedAt: z.string().datetime(),
   recommendationPath: z.enum(["model_backed", "fallback"]).nullable(),
+  pathContext: z
+    .object({
+      status: z.enum(["accepted_model", "fallback_timeout", "fallback_error"]),
+      attemptedProvider: z.string().min(1).nullable(),
+    })
+    .nullable()
+    .optional(),
   parser: z.object({
     provider: z.string().min(1),
     version: z.string().min(1),

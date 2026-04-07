@@ -41,9 +41,11 @@ npm run db:studio
 - Pasted text and file uploads now flow through a shared normalized analysis path.
 - PDF, DOCX, and TXT uploads persist to object storage, parse in the worker, and
   can reach `ready`, `insufficient_evidence`, or `parser_failure`.
-- When `OPENAI_API_KEY` plus the OpenAI recommendation env vars are configured,
-  the worker attempts a model-backed recommendation pass and safely falls back
-  to the current rules engine on timeout, API failure, or invalid JSON.
+- When `CODEX_RECOMMENDATION_ENABLED=true`, the worker can run a model-backed
+  recommendation pass through the local `codex` CLI. When the OpenAI env vars
+  are configured, the worker can also use the existing HTTP adapter. Both paths
+  safely fall back to the current rules engine on timeout, transport failure,
+  or invalid JSON.
 - Session pages surface `ready`, `insufficient_evidence`, and `parser_failure`
   states explicitly.
 - Session detail pages now show whether the output came from the model-backed

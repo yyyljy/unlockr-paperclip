@@ -4,6 +4,7 @@ import type { CandidateProfile, CandidateProfileSignal } from "@/lib/candidate-p
 import type { AnalysisResult } from "@/lib/contracts/recommendations";
 import { analysisResultSchema } from "@/lib/contracts/recommendations";
 import { getServerEnv } from "@/lib/env";
+import { matchesKeyword } from "@/lib/keyword-matching";
 import type { NormalizedAnalysisInput } from "@/lib/resume-intake";
 import { roleTracks } from "@/lib/recommendation-taxonomy";
 
@@ -43,12 +44,11 @@ function collectProfileSignals(profile: CandidateProfile) {
 }
 
 function signalMatchesKeyword(signal: CandidateProfileSignal, keyword: string) {
-  const normalizedKeyword = normalize(keyword);
   const haystack = normalize(
     `${signal.value} ${signal.evidence.map((entry) => entry.snippet).join(" ")}`,
   );
 
-  return haystack.includes(normalizedKeyword);
+  return matchesKeyword(haystack, keyword);
 }
 
 function dedupeStrings(values: string[], max: number) {
@@ -163,6 +163,10 @@ export function buildParserFailureResult(input?: {
 export function analyzeResumeInput(input: {
   analysisInput: NormalizedAnalysisInput;
   profile: CandidateProfile;
+  pathContext?: {
+    status: "fallback_timeout" | "fallback_error";
+    attemptedProvider: string | null;
+  } | null;
 }): AnalysisResult {
   const env = getServerEnv();
   const now = new Date().toISOString();
@@ -175,6 +179,7 @@ export function analyzeResumeInput(input: {
     taxonomyVersion: env.RECOMMENDATION_TAXONOMY_VERSION,
     generatedAt: now,
     recommendationPath: "fallback" as const,
+    pathContext: input.pathContext ?? null,
     parser: input.analysisInput.document.parser,
     model: {
       provider: env.RECOMMENDATION_MODEL_PROVIDER,
@@ -220,7 +225,7 @@ export function analyzeResumeInput(input: {
       );
       const keywordHits = track.keywords.filter(
         (keyword) =>
-          normalizedText.includes(keyword.toLowerCase()) ||
+          matchesKeyword(normalizedText, keyword) ||
           matchedSignals.some((signal) => signalMatchesKeyword(signal, keyword)),
       );
       const evidence = dedupeEvidence(input.profile, matchedSignals);

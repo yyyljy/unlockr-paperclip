@@ -155,6 +155,9 @@ Check the candidate profile before changing recommendation logic:
 ### Sessions keep showing `Fallback rules`
 
 Cause:
+- `CODEX_RECOMMENDATION_ENABLED=true` but the host machine does not have a
+  working `codex` CLI install or login
+- the codex-local adapter timed out or the CLI returned invalid JSON
 - `OPENAI_API_KEY` is missing
 - `OPENAI_RECOMMENDATION_MODEL` or
   `OPENAI_RECOMMENDATION_PROMPT_VERSION` is missing
@@ -163,16 +166,20 @@ Cause:
 
 Check:
 - the session detail page badge and debug panel for `Recommendation path`
-- worker logs for `OpenAI recommendation adapter failed`
+- worker logs for `codex-local recommendation adapter failed` or
+  `OpenAI recommendation adapter failed`
+- run `codex exec --help` on the worker host to confirm the CLI binary is
+  installed and reachable from the worker process
 - `npm run verify:model-path`
-- `.env.local` contains the OpenAI vars on both the web app and worker process
+- `.env.local` contains the codex-local and/or OpenAI vars on both the web app
+  and worker process
 
 ## Useful Inspection Points
 
 - `src/lib/analysis-sessions.ts`: queueing, persistence, and session state changes
 - `src/lib/candidate-profile.ts`: profile extraction heuristics and evidence mapping
-- `src/lib/model-backed-recommendations.ts`: OpenAI adapter, JSON validation,
-  and evidence-key resolution
+- `src/lib/model-backed-recommendations.ts`: codex-local/OpenAI adapters, JSON
+  validation, and evidence-key resolution
 - `src/lib/recommendation-engine.ts`: model-first orchestration with safe
   fallback
 - `src/lib/resume-intake.ts`: parsing, section detection, and quality flags

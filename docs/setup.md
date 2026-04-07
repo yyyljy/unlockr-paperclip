@@ -99,11 +99,13 @@ npm run dev
   feedback state without direct database inspection.
 - `parser_failure` should now occur only for real extraction problems such as an
   empty document, unreadable file, or storage/read failure.
-- When `OPENAI_API_KEY`, `OPENAI_RECOMMENDATION_MODEL`, and
-  `OPENAI_RECOMMENDATION_PROMPT_VERSION` are set, a successful session detail
-  page should show a `Model-backed` path badge instead of `Fallback rules`.
-- `npm run verify:model-path` should exit successfully when the OpenAI config is
-  present and the representative fixture reaches the model-backed path.
+- When `CODEX_RECOMMENDATION_ENABLED=true` on a machine that has a working
+  `codex` CLI login, or when the OpenAI recommendation env vars are set, a
+  successful session detail page should show a `Model-backed` path badge
+  instead of `Fallback rules`.
+- `npm run verify:model-path` should exit successfully when either the
+  codex-local or OpenAI model-backed config is present and the representative
+  fixture reaches the model-backed path.
 
 ## Environment Notes
 
@@ -112,9 +114,17 @@ npm run dev
 - `S3_*`: S3-compatible object storage config; local MinIO is the default
 - `RECOMMENDATION_*`: fallback rules-engine metadata recorded on outputs when
   the model-backed path is unavailable or rejected
+- `CODEX_RECOMMENDATION_ENABLED`, `CODEX_RECOMMENDATION_CLI_PATH`,
+  `CODEX_RECOMMENDATION_MODEL`, `CODEX_RECOMMENDATION_PROMPT_VERSION`, and
+  `CODEX_RECOMMENDATION_TIMEOUT_MS`: optional config for the codex-local
+  recommendation adapter; requires the host machine to have the `codex` CLI
+  installed and authenticated outside the app lifecycle. The default timeout is
+  180000ms to leave headroom for cold `gpt-5.4` xhigh runs before falling back.
 - `OPENAI_API_KEY`, `OPENAI_RECOMMENDATION_MODEL`,
   `OPENAI_RECOMMENDATION_PROMPT_VERSION`, and `OPENAI_RECOMMENDATION_TIMEOUT_MS`:
   optional config for the model-backed recommendation adapter
+- If both codex-local and OpenAI are configured, the worker attempts
+  codex-local first and only falls through to OpenAI if the CLI path fails.
 - `drizzle.config.ts`, the Next.js app, and `scripts/worker.ts` all read
   `.env.local`, so one local env file now drives the full setup path.
 - The canonical first-launch env matrix now lives in `docs/first-launch-ops.md`.
@@ -143,9 +153,12 @@ npm run dev
 
 - PDF and DOCX extraction quality still depends on document structure and
   whether the source contains real text instead of scanned images.
-- The model-backed path currently supports one OpenAI adapter and falls back to
-  the deterministic rules engine when the model config is missing or the JSON
-  output fails validation.
+- The model-backed path now supports both codex-local and OpenAI-backed
+  adapters, but still falls back to the deterministic rules engine when the
+  selected adapter is missing, times out, or returns invalid output.
+- The codex-local adapter depends on a host-level `codex` install and persisted
+  CLI authentication, so operator setup now matters more than with a plain HTTP
+  provider.
 - Feedback capture keeps only the latest session-level state; there is no
   historical audit trail or aggregate analytics yet.
 - The operator review page only shows the 25 most recently updated sessions and
