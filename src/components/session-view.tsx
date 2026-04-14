@@ -34,6 +34,17 @@ type RecommendationPath = AnalysisResult["metadata"]["recommendationPath"];
 type RecommendationPathContext = AnalysisResult["metadata"]["pathContext"];
 type SessionStatus = SessionSnapshot["session"]["status"];
 
+function isModelAnalysisFailure(snapshot: SessionSnapshot) {
+  return (
+    snapshot.session.latestErrorCode === "model_provider_not_configured" ||
+    snapshot.session.latestErrorCode === "model_recommendation_failed" ||
+    snapshot.session.latestErrorCode === "model_recommendation_timed_out" ||
+    snapshot.latestRun?.errorCode === "model_provider_not_configured" ||
+    snapshot.latestRun?.errorCode === "model_recommendation_failed" ||
+    snapshot.latestRun?.errorCode === "model_recommendation_timed_out"
+  );
+}
+
 const recoveryClarificationMaxLength = 4000;
 const recoveryResumeTextMaxLength = 12000;
 const minimumRecoveryClarificationLength = 12;
@@ -54,35 +65,35 @@ async function fetchSessionSnapshot(sessionId: string) {
 function confidenceLabel(confidence: RecommendationConfidenceLabel) {
   switch (confidence) {
     case "high":
-      return "적합도 높음";
+      return "High confidence";
     case "medium":
-      return "적합도 보통";
+      return "Medium confidence";
     case "low":
-      return "적합도 낮음";
+      return "Low confidence";
     case "insufficient":
-      return "판단 보류";
+      return "Insufficient confidence";
   }
 }
 
 function evidenceQualityLabel(evidenceQuality: ReadyEvidenceQuality) {
   switch (evidenceQuality) {
     case "strong":
-      return "근거 강함";
+      return "Strong evidence";
     case "mixed":
-      return "근거 보통";
+      return "Mixed evidence";
     case "thin":
-      return "근거 부족";
+      return "Thin evidence";
   }
 }
 
 function evidenceQualitySummary(evidenceQuality: ReadyEvidenceQuality) {
   switch (evidenceQuality) {
     case "strong":
-      return "여러 근거가 같은 방향을 가리켜 바로 검토하고 행동으로 옮기기 좋은 상태입니다.";
+      return "Multiple signals point in the same direction, so this result is ready for review and action.";
     case "mixed":
-      return "방향은 보이지만 역할 깊이나 도구 맥락이 덜 드러나 있어, 표시된 빈틈을 먼저 확인하는 편이 좋습니다.";
+      return "The direction is visible, but role depth or tool context is still incomplete, so review the gaps first.";
     case "thin":
-      return "가능성 있는 방향은 보이지만 근거 폭이 좁습니다. 출발점으로 보고 부족한 정보를 먼저 보완해 주세요.";
+      return "There is a plausible direction here, but the evidence is narrow. Treat it as a starting point and fill in the missing detail first.";
   }
 }
 
@@ -100,11 +111,11 @@ function evidenceQualityBadgeClassName(evidenceQuality: ReadyEvidenceQuality) {
 function recommendationPathLabel(path: RecommendationPath) {
   switch (path) {
     case "model_backed":
-      return "모델 기반 판단";
+      return "Model-backed path";
     case "fallback":
-      return "보조 규칙 판단";
+      return "Fallback rules path";
     case null:
-      return "판단 경로 없음";
+      return "No recommendation path";
   }
 }
 
@@ -126,7 +137,7 @@ function pathProviderLabel(provider: string | null | undefined) {
     case "openai":
       return "OpenAI";
     default:
-      return provider ?? "모델";
+      return provider ?? "Model";
   }
 }
 
@@ -136,37 +147,37 @@ function recommendationPathSummary(input: {
 }) {
   if (input.recommendationPath === "model_backed") {
     return {
-      title: "모델 분석을 통과한 결과입니다",
+      title: "This result passed through the model-backed path",
       detail:
-        "이번 결과는 모델 판단과 저장된 근거 문장을 함께 통과한 경로입니다. 그래도 아래 근거와 빈틈을 먼저 확인하고 움직이는 편이 좋습니다.",
+        "This result was produced through the model-backed path together with stored evidence sentences. It is still best to review the evidence and gaps before acting on it.",
       tone: "accent" as const,
     };
   }
 
   if (input.pathContext?.status === "fallback_timeout") {
     return {
-      title: "모델 응답이 길어져 보조 규칙으로 전환되었습니다",
+      title: "The model timed out and the result was switched to fallback rules",
       detail: `${pathProviderLabel(
         input.pathContext.attemptedProvider,
-      )} 응답이 제한 시간 안에 끝나지 않아 이번 결과는 보조 규칙으로 정리되었습니다. 개인화된 모델 해석으로 받아들이기보다 아래 근거 문장을 먼저 확인해 주세요.`,
+      )} did not finish within the time limit, so this result was generated with the fallback rules path. Review the evidence below before treating it like a personalized model interpretation.`,
       tone: "warning" as const,
     };
   }
 
   if (input.pathContext?.status === "fallback_error") {
     return {
-      title: "모델 경로 오류로 보조 규칙 판단을 보여드립니다",
+      title: "A model-path error occurred, so fallback rules were used",
       detail: `${pathProviderLabel(
         input.pathContext.attemptedProvider,
-      )} 경로에서 오류가 발생해 이번 결과는 보조 규칙으로 생성되었습니다. 역할 방향은 참고용으로 보고 근거와 주의할 점을 함께 확인해 주세요.`,
+      )} hit an error, so this result was generated with the fallback rules path. Treat the direction as guidance and review both the evidence and the cautions below.`,
       tone: "neutral" as const,
     };
   }
 
   return {
-    title: "이번 결과는 보조 규칙으로 정리되었습니다",
+    title: "This result was generated with fallback rules",
     detail:
-      "현재 이력서에 직접 드러난 역할, 도구, 성과 신호를 바탕으로 규칙 점수를 계산한 결과입니다. 아래 근거 문장을 먼저 확인하고 해석해 주세요.",
+      "This score was computed from roles, tools, and outcome signals directly visible in the resume. Review the evidence sentences below before interpreting it.",
     tone: "neutral" as const,
   };
 }
@@ -203,21 +214,23 @@ function sessionOverviewTitle(snapshot: SessionSnapshot) {
 
   if (snapshot.session.status === "insufficient_evidence") {
     return snapshot.session.candidateLabel
-      ? `${snapshot.session.candidateLabel}에 대해 조금 더 정보가 필요합니다`
-      : "추천 전에 조금 더 정보가 필요합니다";
+      ? `More detail is needed for ${snapshot.session.candidateLabel}`
+      : "More detail is needed before recommending a direction";
   }
 
   if (snapshot.session.status === "parser_failure") {
-    return "업로드한 파일을 읽어들이지 못했습니다";
+    return "The uploaded file could not be read";
   }
 
   if (snapshot.session.status === "failed") {
-    return "결과를 만들기 전에 처리가 중단되었습니다";
+    return isModelAnalysisFailure(snapshot)
+      ? "AI analysis could not finish"
+      : "Processing stopped before a result could be created";
   }
 
   return snapshot.session.candidateLabel
-    ? `${snapshot.session.candidateLabel} 결과를 준비하고 있습니다`
-    : "Unlockr가 결과를 준비하고 있습니다";
+    ? `Preparing the result for ${snapshot.session.candidateLabel}`
+    : "Unlockr is preparing the result";
 }
 
 function sessionOverviewSummary(snapshot: SessionSnapshot) {
@@ -234,41 +247,44 @@ function sessionOverviewSummary(snapshot: SessionSnapshot) {
   }
 
   if (snapshot.session.status === "failed") {
-    return (
-      snapshot.session.latestErrorMessage ??
-      "근거 있는 결과를 보여주기 전에 시스템 처리 문제로 멈췄습니다."
-    );
+    return isModelAnalysisFailure(snapshot)
+      ? (snapshot.session.latestErrorMessage ??
+          "The model-backed analysis failed before a result could be created.")
+      : (snapshot.session.latestErrorMessage ??
+          "The run stopped because of a system processing issue before a grounded result could be shown.");
   }
 
   if (!snapshot.latestRun) {
-    return "요청은 접수되었고 첫 작업을 시작하기 전입니다.";
+    return "The request was accepted and is waiting for the first job to start.";
   }
 
   if (snapshot.latestRun.stage === "parse") {
-    return "이력서에서 텍스트를 읽어 핵심 정보를 정리하고 있습니다.";
+    return "The system is reading text from the resume and organizing the key information.";
   }
 
-  return "읽어낸 내용을 바탕으로 프로필, 추천 방향, 다음 행동을 정리하고 있습니다.";
+  return "The system is turning the parsed content into a profile, recommended directions, and next actions.";
 }
 
 function sessionStatusDetail(snapshot: SessionSnapshot) {
   switch (snapshot.session.status) {
     case "ready":
       return snapshot.result?.status === "ready"
-        ? `추천 방향 ${snapshot.result.recommendations.length}개를 정리했고 ${evidenceQualityLabel(snapshot.result.summary.evidenceQuality)} 상태입니다.`
-        : "결과는 준비되었고 이제 내용을 확인하면 됩니다.";
+        ? `Prepared ${snapshot.result.recommendations.length} recommendation paths with ${evidenceQualityLabel(snapshot.result.summary.evidenceQuality).toLowerCase()}.`
+        : "The result is ready to review.";
     case "insufficient_evidence":
-      return "가능성은 보였지만 지금 정보만으로는 자신 있게 추천하지 않았습니다.";
+      return "Some possible directions were visible, but the current information is not strong enough for a confident recommendation.";
     case "parser_failure":
-      return "첫 단계에서 파일 읽기가 멈춰 억지 판단 대신 복구 경로를 먼저 보여줍니다.";
+      return "File reading stopped at the first stage, so the UI shows recovery options instead of forcing a recommendation.";
     case "failed":
-      return "정보 부족이 아니라 시스템 처리 오류로 멈춘 상태입니다.";
+      return isModelAnalysisFailure(snapshot)
+        ? "This session stopped during the model-backed recommendation step, so no fallback result was generated."
+        : "This session stopped because of a system error, not because the resume lacked detail.";
     case "queued":
-      return "작업 대기열에서 순서를 기다리고 있습니다.";
+      return "Waiting in the job queue.";
     case "parsing":
-      return "이력서 텍스트를 읽고 정리하는 중입니다.";
+      return "Reading and organizing resume text.";
     case "analyzing":
-      return "프로필과 추천 방향을 만드는 중입니다.";
+      return "Building the profile and recommendation paths.";
   }
 }
 
@@ -280,24 +296,24 @@ function sessionNextAction(snapshot: SessionSnapshot) {
     if (nextStep) {
       return {
         title: nextStep.title,
-        detail: `${nextStep.detail} ${nextStep.timeline} · ${nextStep.effort} 강도.`,
+        detail: `${nextStep.detail} ${nextStep.timeline} · ${nextStep.effort} effort.`,
         tone: "accent" as const,
       };
     }
 
     return {
-      title: "가장 높은 순위 방향부터 검토하세요",
+      title: "Start with the highest-ranked direction",
       detail:
-        "가장 가능성이 높은 방향의 근거를 먼저 확인한 뒤, 부족한 점과 다음 행동을 차례로 보는 흐름이 좋습니다.",
+        "Review the evidence for the most likely direction first, then move through its gaps and next actions in order.",
       tone: "accent" as const,
     };
   }
 
   if (snapshot.result?.status === "insufficient_evidence") {
     return {
-      title: "부족한 정보를 먼저 보완하세요",
+      title: "Fill in the missing detail first",
       detail:
-        "아래 보완 입력에 업무 범위, 사용 도구, 산업 맥락, 성과처럼 빠진 정보를 추가한 뒤 다시 실행해 주세요.",
+        "Add missing detail such as scope of work, tools used, industry context, and outcomes in the clarification form below, then run it again.",
       tone: "neutral" as const,
     };
   }
@@ -306,23 +322,23 @@ function sessionNextAction(snapshot: SessionSnapshot) {
     switch (snapshot.result.requiredAction) {
       case "paste_text":
         return {
-          title: "정리된 텍스트로 다시 시도하세요",
+          title: "Retry with cleaned text",
           detail:
-            "파일 읽기 대신 아래 복구 입력에 정리된 이력서 텍스트를 붙여 넣으면 기존 실패 기록은 유지한 채 새 결과를 만들 수 있습니다.",
+            "Instead of relying on file parsing, paste cleaned resume text into the recovery form below to create a new result while keeping the original failure record.",
           tone: "danger" as const,
         };
       case "reupload":
         return {
-          title: "더 깨끗한 파일로 다시 업로드하세요",
+          title: "Upload a cleaner replacement file",
           detail:
-            "교체용 PDF, DOCX, TXT 파일을 다시 올려 읽기 품질을 높인 뒤 새 결과를 만들어 보세요.",
+            "Upload a replacement PDF, DOCX, or TXT file with cleaner text extraction quality and generate a new result.",
           tone: "neutral" as const,
         };
       case "contact_support":
         return {
-          title: "기술 정보 확인 후 수동으로 대응하세요",
+          title: "Review the technical details and handle it manually",
           detail:
-            "이 실패는 화면에서 바로 재시도할 수 없도록 표시되어 있으니, 아래 기술 정보를 먼저 확인해 주세요.",
+            "This failure is marked as not retryable from the UI, so review the technical details below before deciding what to do next.",
           tone: "danger" as const,
         };
     }
@@ -330,17 +346,20 @@ function sessionNextAction(snapshot: SessionSnapshot) {
 
   if (snapshot.session.status === "failed") {
     return {
-      title: "기술 정보와 상태를 먼저 확인하세요",
-      detail:
-        "다시 시도하거나 전달하기 전에 아래 기술 정보를 확인해 두면 원래 실패 맥락을 놓치지 않을 수 있습니다.",
+      title: isModelAnalysisFailure(snapshot)
+        ? "Review the AI failure message first"
+        : "Review the technical state first",
+      detail: isModelAnalysisFailure(snapshot)
+        ? "The model-backed step failed before Unlockr could produce a result. Review the error below, then retry after fixing provider setup, connectivity, or model availability."
+        : "Reviewing the technical details below before retrying or handing it off helps preserve the original failure context.",
       tone: "danger" as const,
     };
   }
 
   return {
-    title: "결과가 정리될 때까지 잠시만 기다려 주세요",
+    title: "Please wait while the result is being prepared",
     detail:
-      "대기, 읽기, 분석 상태에서는 이 페이지가 자동으로 새로고침됩니다.",
+      "This page refreshes automatically while the session is queued, parsing, or analyzing.",
     tone: "neutral" as const,
   };
 }
@@ -359,11 +378,11 @@ function nextActionCardClassName(tone: "accent" | "danger" | "neutral") {
 function gapUrgencyLabel(urgency: RecommendationGapUrgency) {
   switch (urgency) {
     case "now":
-      return "지금 보완";
+      return "Address now";
     case "soon":
-      return "곧 보완";
+      return "Address soon";
     case "later":
-      return "나중에 보완";
+      return "Address later";
   }
 }
 
@@ -432,9 +451,9 @@ function CandidateProfileView({
   if (!candidateProfile) {
     return (
       <section className="rounded-[2rem] border border-[color:var(--border)] bg-[color:var(--panel)] p-6">
-        <h2 className="text-lg font-semibold">정리된 프로필</h2>
+        <h2 className="text-lg font-semibold">Structured Profile</h2>
         <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-          아직 구조화된 프로필이 저장되지 않았습니다.
+          No structured profile has been saved yet.
         </p>
       </section>
     );
@@ -446,24 +465,24 @@ function CandidateProfileView({
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-              정리된 프로필
+              Structured Profile
             </p>
             <h2 className="mt-3 text-2xl font-semibold">
-              {candidateProfile.headline?.value ?? "요약 문장 없이 프로필만 먼저 정리되었습니다"}
+              {candidateProfile.headline?.value ?? "The profile was organized before a summary headline was available."}
             </h2>
             <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-              버전 {candidateProfile.profileVersion} · 생성{" "}
+              Version {candidateProfile.profileVersion} · Created{" "}
               {formatSessionDate(candidateProfile.createdAt)}
             </p>
           </div>
           <div className="rounded-full border border-[color:var(--border)] px-4 py-2 text-sm">
-            {candidateProfile.sourceKind === "resume_text" ? "텍스트 붙여넣기" : "파일 업로드"}
+            {candidateProfile.sourceKind === "resume_text" ? "Pasted Text" : "File Upload"}
           </div>
         </div>
 
         {candidateProfile.coverageNotes.length > 0 ? (
           <div className="mt-5 rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 p-4">
-            <p className="text-sm font-semibold">읽은 범위 메모</p>
+            <p className="text-sm font-semibold">Coverage Notes</p>
             <ul className="mt-3 space-y-2 text-sm text-[color:var(--muted-foreground)]">
               {candidateProfile.coverageNotes.map((note) => (
                 <li key={note}>• {note}</li>
@@ -475,33 +494,33 @@ function CandidateProfileView({
 
       <div className="grid gap-4 xl:grid-cols-2">
         <CandidateProfileSection
-          title="역할 이력"
-          emptyText="추출된 역할 이력 문장이 없습니다."
+          title="Role History"
+          emptyText="No role-history sentences were extracted."
           signals={candidateProfile.roleHistory}
         />
         <CandidateProfileSection
-          title="직무 신호"
-          emptyText="추출된 직무 신호가 없습니다."
+          title="Role Signals"
+          emptyText="No role signals were extracted."
           signals={candidateProfile.roleSignals}
         />
         <CandidateProfileSection
-          title="기술과 도구"
-          emptyText="추출된 기술이나 도구 정보가 없습니다."
+          title="Skills and Tools"
+          emptyText="No skill or tool information was extracted."
           signals={candidateProfile.skills}
         />
         <CandidateProfileSection
-          title="도메인 신호"
-          emptyText="추출된 도메인 신호가 없습니다."
+          title="Domain Signals"
+          emptyText="No domain signals were extracted."
           signals={candidateProfile.domainSignals}
         />
         <CandidateProfileSection
-          title="성과 문장"
-          emptyText="추출된 성과 문장이 없습니다."
+          title="Achievement Snippets"
+          emptyText="No achievement snippets were extracted."
           signals={candidateProfile.achievements}
         />
         <CandidateProfileSection
-          title="학력과 자격"
-          emptyText="추출된 학력이나 자격 정보가 없습니다."
+          title="Education and Credentials"
+          emptyText="No education or credential information was extracted."
           signals={[
             ...candidateProfile.educationSignals,
             ...candidateProfile.certificationSignals,
@@ -518,7 +537,7 @@ function RecommendationCard({ recommendation }: { recommendation: ReadyRecommend
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-            추천 {recommendation.rank}
+            Recommendation {recommendation.rank}
           </p>
           <h3 className="mt-2 text-xl font-semibold">{recommendation.roleTitle}</h3>
           <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
@@ -533,7 +552,7 @@ function RecommendationCard({ recommendation }: { recommendation: ReadyRecommend
 
       <div className="mt-4 rounded-[1.5rem] border border-[color:var(--border)] bg-[color:var(--panel)] p-4">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-          왜 이렇게 판단했나요
+          Why this fit
         </p>
         <p className="mt-2 text-sm leading-7 text-[color:var(--muted-foreground)]">
           {recommendation.confidence.explanation}
@@ -544,7 +563,7 @@ function RecommendationCard({ recommendation }: { recommendation: ReadyRecommend
 
       <div className="mt-5 grid gap-4 md:grid-cols-2">
         <div>
-          <p className="text-sm font-semibold">직접 드러난 경험</p>
+          <p className="text-sm font-semibold">Directly observed experience</p>
           <ul className="mt-2 space-y-2 text-sm text-[color:var(--muted-foreground)]">
             {recommendation.detectedExperience.map((item) => (
               <li key={item}>• {item}</li>
@@ -552,7 +571,7 @@ function RecommendationCard({ recommendation }: { recommendation: ReadyRecommend
           </ul>
         </div>
         <div>
-          <p className="text-sm font-semibold">추가로 연결되는 가능성</p>
+          <p className="text-sm font-semibold">Additional inferred potential</p>
           <ul className="mt-2 space-y-2 text-sm text-[color:var(--muted-foreground)]">
             {recommendation.inferredPotential.map((item) => (
               <li key={item}>• {item}</li>
@@ -563,7 +582,7 @@ function RecommendationCard({ recommendation }: { recommendation: ReadyRecommend
 
       <div className="mt-5 grid gap-4 md:grid-cols-2">
         <div>
-          <p className="text-sm font-semibold">근거 문장</p>
+          <p className="text-sm font-semibold">Evidence sentences</p>
           <div className="mt-2 space-y-3">
             {recommendation.evidence.map((evidence) => (
               <div
@@ -579,7 +598,7 @@ function RecommendationCard({ recommendation }: { recommendation: ReadyRecommend
           </div>
         </div>
         <div>
-          <p className="text-sm font-semibold">바로 할 다음 행동</p>
+          <p className="text-sm font-semibold">Next actions</p>
           <div className="mt-2 space-y-3">
             {recommendation.nextSteps.map((step) => (
               <div
@@ -589,7 +608,7 @@ function RecommendationCard({ recommendation }: { recommendation: ReadyRecommend
                 <p className="font-medium">{step.title}</p>
                 <p className="mt-1 text-[color:var(--muted-foreground)]">{step.detail}</p>
                 <p className="mt-2 text-xs uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-                  {step.timeline} · {step.effort} 강도
+                  {step.timeline} · {step.effort} effort
                 </p>
               </div>
             ))}
@@ -599,10 +618,10 @@ function RecommendationCard({ recommendation }: { recommendation: ReadyRecommend
 
       <div className="mt-5 grid gap-4 md:grid-cols-2">
         <div className="rounded-[1.5rem] border border-[color:var(--border)] bg-[color:var(--panel)] p-4">
-          <p className="text-sm font-semibold">먼저 메우면 좋은 빈틈</p>
+          <p className="text-sm font-semibold">Gaps to address first</p>
           {recommendation.gaps.length === 0 ? (
             <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-              이 방향에서 바로 막히는 빈틈은 표시되지 않았습니다.
+              No immediate blocking gaps were identified for this direction.
             </p>
           ) : (
             <div className="mt-3 space-y-3">
@@ -627,10 +646,10 @@ function RecommendationCard({ recommendation }: { recommendation: ReadyRecommend
         </div>
 
         <div className="rounded-[1.5rem] border border-[color:var(--border)] bg-[color:var(--panel)] p-4">
-          <p className="text-sm font-semibold">주의할 점</p>
+          <p className="text-sm font-semibold">Cautions</p>
           {recommendation.risks.length === 0 ? (
             <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-              추가로 크게 주의할 점은 표시되지 않았습니다.
+              No major additional cautions were flagged.
             </p>
           ) : (
             <div className="mt-3 space-y-3">
@@ -654,9 +673,9 @@ function SessionResult({ result }: { result: AnalysisResult | null }) {
   if (!result) {
     return (
       <div className="rounded-[2rem] border border-[color:var(--border)] bg-[color:var(--panel)] p-6">
-        <h2 className="text-lg font-semibold">아직 결과를 정리하는 중입니다</h2>
+        <h2 className="text-lg font-semibold">The result is still being prepared</h2>
         <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-          종료 상태용 결과 데이터가 아직 저장되지 않았습니다.
+          Terminal-state result data has not been saved yet.
         </p>
       </div>
     );
@@ -675,13 +694,13 @@ function SessionResult({ result }: { result: AnalysisResult | null }) {
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-                가장 먼저 볼 방향
+                Start here
               </p>
               <h2 className="mt-3 text-2xl font-semibold">
-                {featuredRecommendation?.roleTitle ?? "가장 높은 우선순위 추천"}
+                {featuredRecommendation?.roleTitle ?? "Highest-priority recommendation"}
               </h2>
               <p className="mt-2 max-w-2xl text-sm leading-7 text-[color:var(--muted-foreground)]">
-                근거 문장과 주의할 점을 먼저 확인한 뒤, 아래 다른 방향과 비교해 보세요.
+                Review the evidence and cautions for this direction first, then compare it with the other options below.
               </p>
             </div>
             <div
@@ -711,9 +730,9 @@ function SessionResult({ result }: { result: AnalysisResult | null }) {
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-                결과 읽는 법
+                How to read this result
               </p>
-              <h2 className="mt-3 text-2xl font-semibold">왜 이 방향을 추천했는지 먼저 확인하세요</h2>
+              <h2 className="mt-3 text-2xl font-semibold">Check why this direction was recommended before anything else</h2>
               <p className="mt-2 max-w-2xl text-sm leading-7 text-[color:var(--muted-foreground)]">
                 {evidenceQualitySummary(result.summary.evidenceQuality)}
               </p>
@@ -730,19 +749,19 @@ function SessionResult({ result }: { result: AnalysisResult | null }) {
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             <div className="rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-                추천 방향 수
+                Recommendation count
               </p>
               <p className="mt-2 text-3xl font-semibold">{result.recommendations.length}</p>
               <p className="mt-2 text-sm leading-7 text-[color:var(--muted-foreground)]">
-                가장 높은 순위 방향부터 보고, 뒤의 방향은 대안이나 인접 경로로 비교해 보세요.
+                Start with the top-ranked direction and use the others as alternatives or adjacent paths.
               </p>
             </div>
             <div className="rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-                확인 순서
+                Review order
               </p>
               <p className="mt-2 text-sm leading-7 text-[color:var(--muted-foreground)]">
-                근거 문장이 실제 이력서와 맞는지 확인한 뒤, 부족한 점과 다음 행동을 보고 움직이면 됩니다.
+                Confirm that the evidence matches the resume first, then move through the gaps and next actions.
               </p>
             </div>
           </div>
@@ -752,9 +771,9 @@ function SessionResult({ result }: { result: AnalysisResult | null }) {
           <section className="space-y-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-                함께 볼 다른 방향
+                Other directions to compare
               </p>
-              <h2 className="mt-3 text-2xl font-semibold">비교해 볼 수 있는 후순위 추천</h2>
+              <h2 className="mt-3 text-2xl font-semibold">Lower-ranked recommendations worth comparing</h2>
             </div>
             <div className="grid gap-4">
               {otherRecommendations.map((recommendation) => (
@@ -773,13 +792,13 @@ function SessionResult({ result }: { result: AnalysisResult | null }) {
   if (result.status === "insufficient_evidence") {
     return (
       <section className="rounded-[2rem] border border-[color:var(--border)] bg-[color:var(--panel)] p-6">
-        <h2 className="text-2xl font-semibold">조금 더 정보가 필요합니다</h2>
+        <h2 className="text-2xl font-semibold">More detail is needed</h2>
         <p className="mt-2 text-sm leading-7 text-[color:var(--muted-foreground)]">
           {result.userMessage}
         </p>
         <div className="mt-5 grid gap-5 md:grid-cols-2">
           <div>
-            <p className="text-sm font-semibold">지금 막히는 이유</p>
+            <p className="text-sm font-semibold">What is blocking confidence right now</p>
             <ul className="mt-2 space-y-2 text-sm text-[color:var(--muted-foreground)]">
               {result.blockingFindings.map((item) => (
                 <li key={item}>• {item}</li>
@@ -787,7 +806,7 @@ function SessionResult({ result }: { result: AnalysisResult | null }) {
             </ul>
           </div>
           <div>
-            <p className="text-sm font-semibold">보완 질문</p>
+            <p className="text-sm font-semibold">Follow-up questions</p>
             <ul className="mt-2 space-y-2 text-sm text-[color:var(--muted-foreground)]">
               {result.followUpQuestions.map((item) => (
                 <li key={item}>• {item}</li>
@@ -801,22 +820,22 @@ function SessionResult({ result }: { result: AnalysisResult | null }) {
 
   return (
     <section className="rounded-[2rem] border border-[color:var(--border)] bg-[color:var(--panel)] p-6">
-      <h2 className="text-2xl font-semibold">파일 읽기 단계에서 멈췄습니다</h2>
+      <h2 className="text-2xl font-semibold">The run stopped during file parsing</h2>
       <p className="mt-2 text-sm leading-7 text-[color:var(--muted-foreground)]">
         {result.userMessage}
       </p>
       <p className="mt-3 text-sm leading-7 text-[color:var(--muted-foreground)]">
-        아래 복구 기능에서 파일을 교체하거나 정리된 텍스트를 넣어 다시 시도할 수 있고, 기존 실패 기록은 그대로 남습니다.
+        Use the recovery tools below to retry with a replacement file or cleaned text. The original failure record is preserved.
       </p>
       <div className="mt-5 flex flex-wrap gap-3 text-sm">
         <span className="rounded-full bg-[color:var(--accent-soft)] px-4 py-2 text-[color:var(--accent-strong)]">
-          오류 코드: {result.errorCode}
+          Error code: {result.errorCode}
         </span>
         <span className="rounded-full border border-[color:var(--border)] px-4 py-2">
-          권장 동작: {result.requiredAction}
+          Recommended action: {result.requiredAction}
         </span>
         <span className="rounded-full border border-[color:var(--border)] px-4 py-2">
-          재시도 가능: {result.retryable ? "예" : "아니오"}
+          Retryable: {result.retryable ? "Yes" : "No"}
         </span>
       </div>
     </section>
@@ -832,7 +851,7 @@ function SessionOverview({ snapshot }: { snapshot: SessionSnapshot }) {
       <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-            결과 개요
+            Session Overview
           </p>
           <h1 className="mt-3 text-3xl font-semibold tracking-tight md:text-4xl">
             {sessionOverviewTitle(snapshot)}
@@ -876,7 +895,7 @@ function SessionOverview({ snapshot }: { snapshot: SessionSnapshot }) {
           className={`rounded-[1.75rem] border p-5 ${nextActionCardClassName(nextAction.tone)}`}
         >
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-            지금 할 일
+            Next best action
           </p>
           <h2 className="mt-3 text-xl font-semibold">{nextAction.title}</h2>
           <p className="mt-2 text-sm leading-7 text-[color:var(--muted-foreground)]">
@@ -888,30 +907,30 @@ function SessionOverview({ snapshot }: { snapshot: SessionSnapshot }) {
       <div className="mt-6 grid gap-4 md:grid-cols-3">
         <div className="rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 p-5">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-            현재 상태
+            Current status
           </p>
           <p className="mt-3 text-sm leading-7">{currentStatusDetail}</p>
         </div>
         <div className="rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 p-5">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-            받은 입력
+            Input received
           </p>
           <p className="mt-3 text-sm font-semibold">
-            {snapshot.session.candidateLabel ?? "이름이나 메모 없이 생성된 결과"}
+            {snapshot.session.candidateLabel ?? "Session created without a name or note"}
           </p>
           <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-            입력 방식: {sessionSourceLabel(snapshot.session.sourceType)}
+            Input source: {sessionSourceLabel(snapshot.session.sourceType)}
           </p>
         </div>
         <div className="rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 p-5">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-            진행 시각
+            Timeline
           </p>
           <p className="mt-3 text-sm font-semibold">
-            시작 {formatSessionDate(snapshot.session.createdAt)}
+            Started {formatSessionDate(snapshot.session.createdAt)}
           </p>
           <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-            업데이트 {formatSessionDate(snapshot.session.updatedAt)}
+            Updated {formatSessionDate(snapshot.session.updatedAt)}
           </p>
         </div>
       </div>
@@ -921,61 +940,61 @@ function SessionOverview({ snapshot }: { snapshot: SessionSnapshot }) {
 
 function SessionDebugDetails({ snapshot }: { snapshot: SessionSnapshot }) {
   const debugItems = [
-    { label: "결과 ID", value: snapshot.session.id },
+    { label: "Session ID", value: snapshot.session.id },
     {
-      label: "현재 실행 상태",
+      label: "Latest run status",
       value: snapshot.latestRun
         ? `${snapshot.latestRun.stage} · ${snapshot.latestRun.status}`
-        : "아직 실행이 만들어지지 않았습니다",
+        : "No run has been created yet",
     },
     {
-      label: "큐 작업 ID",
-      value: snapshot.latestRun?.queueJobId ?? "대기 중",
+      label: "Queue job ID",
+      value: snapshot.latestRun?.queueJobId ?? "Waiting",
     },
     {
-      label: "계약 버전",
-      value: snapshot.session.contractVersion ?? "대기 중",
+      label: "Contract version",
+      value: snapshot.session.contractVersion ?? "Waiting",
     },
     {
-      label: "파서 버전",
-      value: snapshot.session.parserVersion ?? "대기 중",
+      label: "Parser version",
+      value: snapshot.session.parserVersion ?? "Waiting",
     },
     {
-      label: "판단 경로",
+      label: "Recommendation path",
       value: recommendationPathLabel(snapshot.result?.metadata.recommendationPath ?? null),
     },
     {
-      label: "모델 제공자",
-      value: snapshot.result?.metadata.model?.provider ?? "대기 중",
+      label: "Model provider",
+      value: snapshot.result?.metadata.model?.provider ?? "Waiting",
     },
     {
-      label: "모델 버전",
-      value: snapshot.session.modelVersion ?? "대기 중",
+      label: "Model version",
+      value: snapshot.session.modelVersion ?? "Waiting",
     },
     {
-      label: "프롬프트 버전",
-      value: snapshot.session.promptVersion ?? "대기 중",
+      label: "Prompt version",
+      value: snapshot.session.promptVersion ?? "Waiting",
     },
     {
-      label: "분류 체계 버전",
-      value: snapshot.session.taxonomyVersion ?? "대기 중",
+      label: "Taxonomy version",
+      value: snapshot.session.taxonomyVersion ?? "Waiting",
     },
     {
-      label: "추천 묶음 ID",
-      value: snapshot.recommendationSet?.id ?? "아직 없음",
+      label: "Recommendation set ID",
+      value: snapshot.recommendationSet?.id ?? "Not created yet",
     },
   ];
 
   if (snapshot.latestRun?.errorCode) {
     debugItems.push({
-      label: "최근 실행 오류",
+      label: "Latest run error",
       value: `${snapshot.latestRun.errorCode}${
         snapshot.latestRun.errorMessage ? ` · ${snapshot.latestRun.errorMessage}` : ""
       }`,
     });
   } else if (snapshot.session.latestErrorCode) {
     debugItems.push({
-      label: "최근 결과 오류",
+      label: "Latest result error",
       value: `${snapshot.session.latestErrorCode}${
         snapshot.session.latestErrorMessage ? ` · ${snapshot.session.latestErrorMessage}` : ""
       }`,
@@ -985,10 +1004,10 @@ function SessionDebugDetails({ snapshot }: { snapshot: SessionSnapshot }) {
   return (
     <details className="rounded-[2rem] border border-[color:var(--border)] bg-white/80 p-6">
       <summary className="cursor-pointer list-none text-lg font-semibold">
-        기술 정보
+        Technical Details
       </summary>
       <p className="mt-3 max-w-3xl text-sm leading-7 text-[color:var(--muted-foreground)]">
-        원본 식별자와 실행 상태 같은 기술 정보는 여기 모아 두고, 위 화면은 결과와 다음 행동에 집중하도록 분리했습니다.
+        Raw identifiers and execution-state details live here so the main page can stay focused on the result and the next action.
       </p>
       <div className="mt-5 grid gap-3 md:grid-cols-2">
         {debugItems.map((item) => (
@@ -1014,20 +1033,20 @@ function SessionLineage({ snapshot }: { snapshot: SessionSnapshot }) {
 
   const retriedFromHeading =
     snapshot.retriedFromSession?.status === "parser_failure"
-      ? "이전 파일 읽기 실패 결과에서 이어졌습니다"
-      : "이전 정보 보완 필요 결과에서 이어졌습니다";
+      ? "This session continues from an earlier parser-failure result"
+      : "This session continues from an earlier clarification-needed result";
   const retriedFromDescription =
     snapshot.retriedFromSession?.status === "parser_failure"
-      ? "이 결과는 이전 업로드를 읽지 못해 교체 입력으로 다시 시작한 흐름입니다."
-      : "이 결과는 기존 입력에 추가 설명을 붙여 다시 실행한 흐름입니다.";
+      ? "This run restarted with replacement input after the earlier upload could not be read."
+      : "This run restarted after adding extra clarification to the original input.";
 
   return (
     <section className="rounded-[2rem] border border-[color:var(--border)] bg-[color:var(--panel)] p-6">
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-          이어진 결과
+          Linked Sessions
         </p>
-        <h2 className="mt-3 text-2xl font-semibold">이 결과가 어디서 이어졌는지 보여줍니다</h2>
+        <h2 className="mt-3 text-2xl font-semibold">See where this session came from and what followed it</h2>
       </div>
 
       {snapshot.retriedFromSession ? (
@@ -1039,7 +1058,7 @@ function SessionLineage({ snapshot }: { snapshot: SessionSnapshot }) {
               href={`/sessions/${snapshot.retriedFromSession.id}`}
               className="rounded-full border border-[color:var(--border)] px-4 py-2 font-semibold transition hover:bg-white/70"
             >
-              이전 결과 열기 {snapshot.retriedFromSession.id}
+              Open previous session {snapshot.retriedFromSession.id}
             </Link>
             <span className="rounded-full bg-[color:var(--accent-soft)] px-4 py-2 text-[color:var(--accent-strong)]">
               {sessionStatusLabel(snapshot.retriedFromSession.status)}
@@ -1053,7 +1072,7 @@ function SessionLineage({ snapshot }: { snapshot: SessionSnapshot }) {
 
       {snapshot.recoverySessions.length > 0 ? (
         <div className="mt-5 rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 p-4">
-          <p className="text-sm font-semibold">이 결과에서 다시 시작된 후속 실행</p>
+          <p className="text-sm font-semibold">Follow-up sessions started from this result</p>
           <div className="mt-4 space-y-3">
             {snapshot.recoverySessions.map((recoverySession) => (
               <div
@@ -1063,7 +1082,7 @@ function SessionLineage({ snapshot }: { snapshot: SessionSnapshot }) {
                 <div>
                   <p className="font-mono text-sm font-semibold">{recoverySession.id}</p>
                   <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-                    생성 {formatSessionDate(recoverySession.createdAt)}
+                    Created {formatSessionDate(recoverySession.createdAt)}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3 text-sm">
@@ -1077,7 +1096,7 @@ function SessionLineage({ snapshot }: { snapshot: SessionSnapshot }) {
                     href={`/sessions/${recoverySession.id}`}
                     className="rounded-full border border-[color:var(--border)] px-4 py-2 font-semibold transition hover:bg-white/70"
                   >
-                    후속 결과 열기
+                    Open follow-up session
                   </Link>
                 </div>
               </div>
@@ -1104,7 +1123,7 @@ function InsufficientEvidenceRecovery({ snapshot }: { snapshot: SessionSnapshot 
     event.preventDefault();
 
     if (clarificationText.trim().length < minimumRecoveryClarificationLength) {
-      setSubmissionError("다시 실행하기 전에 짧은 보완 설명을 적어 주세요.");
+      setSubmissionError("Add a short clarification before retrying.");
       return;
     }
 
@@ -1124,13 +1143,13 @@ function InsufficientEvidenceRecovery({ snapshot }: { snapshot: SessionSnapshot 
       const payload = (await response.json().catch(() => null)) as RecoveryResponse;
 
       if (!response.ok || !payload?.sessionId) {
-        setSubmissionError(payload?.message ?? "보완 실행을 시작하지 못했습니다.");
+        setSubmissionError(payload?.message ?? "Could not start the clarification retry.");
         return;
       }
 
       router.push(`/sessions/${payload.sessionId}`);
     } catch {
-      setSubmissionError("보완 실행을 시작하지 못했습니다.");
+      setSubmissionError("Could not start the clarification retry.");
     } finally {
       setIsSubmitting(false);
     }
@@ -1141,36 +1160,36 @@ function InsufficientEvidenceRecovery({ snapshot }: { snapshot: SessionSnapshot 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-            보완 실행
+            Clarification Retry
           </p>
-          <h2 className="mt-3 text-2xl font-semibold">빠진 정보를 덧붙여 다시 실행하세요</h2>
+          <h2 className="mt-3 text-2xl font-semibold">Add the missing detail and run it again</h2>
           <p className="mt-2 max-w-2xl text-sm leading-7 text-[color:var(--muted-foreground)]">
-            기존 입력은 유지한 채 이 보완 설명만 덧붙여 새 결과를 만들 수 있습니다. 처음부터 다시 입력할 필요는 없습니다.
+            The original input stays in place. This retry creates a new result using only the added clarification, so there is no need to start over.
           </p>
         </div>
         <div className="rounded-full border border-[color:var(--border)] px-4 py-2 text-sm">
-          현재 흐름 안에서 바로 이어집니다
+          Continues inside the current session flow
         </div>
       </div>
 
       <form className="mt-5 space-y-4" onSubmit={handleSubmit}>
         <label className="block">
-          <span className="text-sm font-semibold">보완 설명</span>
+          <span className="text-sm font-semibold">Clarification</span>
           <textarea
             value={clarificationText}
             maxLength={recoveryClarificationMaxLength}
             disabled={isSubmitting}
             onChange={(event) => setClarificationText(event.target.value)}
-            placeholder="첫 결과에서 부족했던 업무 범위, 사용 도구, 산업 맥락, 성과 내용을 구체적으로 적어 주세요."
+            placeholder="Add concrete detail about scope, tools, industry context, or outcomes that were missing from the first result."
             className="mt-2 min-h-32 w-full rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-[color:var(--accent)]"
           />
           <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
-            {clarificationText.length}/{recoveryClarificationMaxLength}자
+            {clarificationText.length}/{recoveryClarificationMaxLength} characters
           </p>
         </label>
 
         <div className="rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 p-4">
-          <p className="text-sm font-semibold">이 질문부터 답해 보세요</p>
+          <p className="text-sm font-semibold">Start by answering these questions</p>
           <ul className="mt-3 space-y-2 text-sm text-[color:var(--muted-foreground)]">
             {result.followUpQuestions.map((question) => (
               <li key={question}>• {question}</li>
@@ -1188,10 +1207,10 @@ function InsufficientEvidenceRecovery({ snapshot }: { snapshot: SessionSnapshot 
             disabled={isSubmitting}
             className="rounded-full bg-[color:var(--accent)] px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isSubmitting ? "보완 실행 시작 중..." : "보완 정보로 다시 실행"}
+            {isSubmitting ? "Starting clarification retry..." : "Retry with clarification"}
           </button>
           <p className="text-sm text-[color:var(--muted-foreground)]">
-            새 결과에는 이 보완 전 시도와의 연결 정보가 그대로 남습니다.
+            The new result keeps the linkage back to this pre-clarification attempt.
           </p>
         </div>
       </form>
@@ -1229,17 +1248,17 @@ function ParserFailureRecovery({ snapshot }: { snapshot: SessionSnapshot }) {
       !activeResult.retryable ||
       activeResult.requiredAction === "contact_support"
     ) {
-      setSubmissionError("이 파일 읽기 실패는 이 화면에서 바로 재시도할 수 없습니다.");
+      setSubmissionError("This parser failure cannot be retried directly from this screen.");
       return;
     }
 
     if (recoveryMode === "pasted_text" && resumeText.trim().length < minimumRecoveryResumeTextLength) {
-      setSubmissionError("다시 실행하기 전에 더 충분한 이력서 텍스트를 붙여 넣어 주세요.");
+      setSubmissionError("Paste a more complete resume text before retrying.");
       return;
     }
 
     if (recoveryMode === "file_upload" && !resumeFile) {
-      setSubmissionError("다시 시도하려면 교체할 PDF, DOCX, TXT 파일을 선택해 주세요.");
+      setSubmissionError("Choose a replacement PDF, DOCX, or TXT file before retrying.");
       return;
     }
 
@@ -1264,13 +1283,13 @@ function ParserFailureRecovery({ snapshot }: { snapshot: SessionSnapshot }) {
       const payload = (await response.json().catch(() => null)) as RecoveryResponse;
 
       if (!response.ok || !payload?.sessionId) {
-        setSubmissionError(payload?.message ?? "파일 복구 실행을 시작하지 못했습니다.");
+        setSubmissionError(payload?.message ?? "Could not start the file recovery retry.");
         return;
       }
 
       router.push(`/sessions/${payload.sessionId}`);
     } catch {
-      setSubmissionError("파일 복구 실행을 시작하지 못했습니다.");
+      setSubmissionError("Could not start the file recovery retry.");
     } finally {
       setIsSubmitting(false);
     }
@@ -1285,15 +1304,15 @@ function ParserFailureRecovery({ snapshot }: { snapshot: SessionSnapshot }) {
         <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-            복구 실행
+            Recovery Retry
           </p>
-          <h2 className="mt-3 text-2xl font-semibold">수동 확인이 필요합니다</h2>
+          <h2 className="mt-3 text-2xl font-semibold">Manual review is required</h2>
           <p className="mt-2 max-w-2xl text-sm leading-7 text-[color:var(--muted-foreground)]">
-            이 파일 읽기 실패는 화면에서 바로 복구할 수 없도록 표시되어 있습니다. 기술 정보를 먼저 확인한 뒤 새로 시작할지 결정해 주세요.
+            This parser failure is marked as not directly recoverable from the UI. Review the technical details first, then decide whether to start over manually.
           </p>
         </div>
         <div className="rounded-full border border-[color:var(--border)] px-4 py-2 text-sm">
-          기존 실패 기록은 유지됩니다
+          The original failure record is preserved
         </div>
       </div>
       </section>
@@ -1305,30 +1324,30 @@ function ParserFailureRecovery({ snapshot }: { snapshot: SessionSnapshot }) {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-            복구 실행
+            Recovery Retry
           </p>
-          <h2 className="mt-3 text-2xl font-semibold">새 입력으로 다시 시도하세요</h2>
+          <h2 className="mt-3 text-2xl font-semibold">Retry with new input</h2>
           <p className="mt-2 max-w-2xl text-sm leading-7 text-[color:var(--muted-foreground)]">
-            더 깨끗한 파일로 교체하거나 정리된 텍스트를 직접 붙여 넣어 새 결과를 만들 수 있습니다. 기존 실패 기록은 그대로 남습니다.
+            Replace the file with a cleaner version or paste cleaned text directly to create a new result. The original failure record stays intact.
           </p>
         </div>
         <div className="rounded-full border border-[color:var(--border)] px-4 py-2 text-sm">
-          기존 실패 기록은 유지됩니다
+          The original failure record is preserved
         </div>
       </div>
 
       <div className="mt-5 rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 p-4">
-        <p className="text-sm font-semibold">먼저 이렇게 해 보세요</p>
+        <p className="text-sm font-semibold">Suggested first step</p>
         <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
           {activeResult.requiredAction === "paste_text"
-            ? "원본 파일을 안정적으로 읽지 못한다면 정리된 텍스트를 직접 붙여 넣는 편이 빠릅니다."
-            : "우선 교체 파일을 다시 올려 보고, 계속 불안정하면 텍스트 붙여넣기로 넘어가세요."}
+            ? "If the original file cannot be parsed reliably, pasting cleaned text is usually the fastest path."
+            : "Start by uploading a cleaner replacement file. If parsing remains unstable, switch to pasted text."}
         </p>
       </div>
 
       <form className="mt-5 space-y-4" onSubmit={handleSubmit}>
         <div className="rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 p-4">
-          <p className="text-sm font-semibold">복구 입력 방식 선택</p>
+          <p className="text-sm font-semibold">Choose a recovery input mode</p>
           <div className="mt-4 flex flex-wrap gap-3 text-sm">
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[color:var(--border)] px-4 py-2">
               <input
@@ -1340,7 +1359,7 @@ function ParserFailureRecovery({ snapshot }: { snapshot: SessionSnapshot }) {
                 className="accent-[color:var(--accent)]"
                 onChange={() => setRecoveryMode("file_upload")}
               />
-              교체 파일 업로드
+              Upload replacement file
             </label>
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[color:var(--border)] px-4 py-2">
               <input
@@ -1352,14 +1371,14 @@ function ParserFailureRecovery({ snapshot }: { snapshot: SessionSnapshot }) {
                 className="accent-[color:var(--accent)]"
                 onChange={() => setRecoveryMode("pasted_text")}
               />
-              정리된 텍스트 붙여넣기
+              Paste cleaned text
             </label>
           </div>
         </div>
 
         {recoveryMode === "file_upload" ? (
           <label className="block">
-            <span className="text-sm font-semibold">교체할 이력서 파일</span>
+            <span className="text-sm font-semibold">Replacement resume file</span>
             <input
               type="file"
               accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
@@ -1368,22 +1387,22 @@ function ParserFailureRecovery({ snapshot }: { snapshot: SessionSnapshot }) {
               onChange={(event) => setResumeFile(event.target.files?.[0] ?? null)}
             />
             <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
-              더 깨끗한 PDF, DOCX, TXT 파일을 올려 주세요. 최대 8MB입니다.
+              Upload a cleaner PDF, DOCX, or TXT file. Maximum size is 8MB.
             </p>
           </label>
         ) : (
           <label className="block">
-            <span className="text-sm font-semibold">정리된 이력서 텍스트</span>
+            <span className="text-sm font-semibold">Cleaned resume text</span>
             <textarea
               value={resumeText}
               maxLength={recoveryResumeTextMaxLength}
               disabled={isSubmitting}
               onChange={(event) => setResumeText(event.target.value)}
-              placeholder="업무 범위, 사용 도구, 산업 맥락, 성과가 드러나도록 텍스트 버전을 붙여 넣어 주세요."
+              placeholder="Paste a text version that clearly shows scope, tools, domain context, and outcomes."
               className="mt-2 min-h-32 w-full rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-[color:var(--accent)]"
             />
             <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
-              {resumeText.length}/{recoveryResumeTextMaxLength}자
+              {resumeText.length}/{recoveryResumeTextMaxLength} characters
             </p>
           </label>
         )}
@@ -1399,13 +1418,13 @@ function ParserFailureRecovery({ snapshot }: { snapshot: SessionSnapshot }) {
             className="rounded-full bg-[color:var(--accent)] px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isSubmitting
-              ? "복구 실행 시작 중..."
+              ? "Starting recovery retry..."
               : recoveryMode === "file_upload"
-                ? "교체 파일로 다시 실행"
-                : "텍스트로 다시 실행"}
+                ? "Retry with replacement file"
+                : "Retry with pasted text"}
           </button>
           <p className="text-sm text-[color:var(--muted-foreground)]">
-            새 결과에는 이 파일 읽기 실패 시도와의 연결 정보가 그대로 남습니다.
+            The new result keeps the linkage back to this parser-failure attempt.
           </p>
         </div>
       </form>
@@ -1453,7 +1472,7 @@ function SessionFeedback({
     event.preventDefault();
 
     if (!selectedSentiment) {
-      setSubmissionError("이번 결과가 도움이 되었는지 먼저 선택해 주세요.");
+      setSubmissionError("Choose whether this result was helpful before submitting.");
       return;
     }
 
@@ -1477,13 +1496,13 @@ function SessionFeedback({
         | null;
 
       if (!response.ok) {
-        setSubmissionError(payload?.message ?? "피드백을 저장하지 못했습니다.");
+        setSubmissionError(payload?.message ?? "Could not save the feedback.");
         return;
       }
 
       await onRefresh();
     } catch {
-      setSubmissionError("피드백을 저장하지 못했습니다.");
+      setSubmissionError("Could not save the feedback.");
     } finally {
       setIsSubmitting(false);
     }
@@ -1494,11 +1513,11 @@ function SessionFeedback({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-            결과 피드백
+            Result Feedback
           </p>
-          <h2 className="mt-3 text-2xl font-semibold">이번 결과가 실제로 도움이 되었나요?</h2>
+          <h2 className="mt-3 text-2xl font-semibold">Was this result actually helpful?</h2>
           <p className="mt-2 max-w-2xl text-sm leading-7 text-[color:var(--muted-foreground)]">
-            결과가 나온 항목마다 최신 피드백 1개를 저장할 수 있고, 다시 저장하면 이전 내용이 교체됩니다.
+            Each result stores one latest feedback state. Saving again replaces the earlier feedback for this session.
           </p>
         </div>
         {savedFeedback ? (
@@ -1507,7 +1526,7 @@ function SessionFeedback({
           </div>
         ) : (
           <div className="rounded-full border border-[color:var(--border)] px-4 py-2 text-sm">
-            아직 저장되지 않음
+            Not saved yet
           </div>
         )}
       </div>
@@ -1515,16 +1534,16 @@ function SessionFeedback({
       {savedFeedback ? (
         <div className="mt-5 rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 p-4">
           <p className="text-sm font-semibold">
-            저장된 피드백: {feedbackSentimentLabel(savedFeedback.sentiment)}
+            Saved feedback: {feedbackSentimentLabel(savedFeedback.sentiment)}
           </p>
           <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-            업데이트 {formatSessionDate(savedFeedback.updatedAt)}
+            Updated {formatSessionDate(savedFeedback.updatedAt)}
           </p>
           {savedFeedback.note ? (
             <p className="mt-3 text-sm leading-7">{savedFeedback.note}</p>
           ) : (
             <p className="mt-3 text-sm text-[color:var(--muted-foreground)]">
-              메모는 함께 저장되지 않았습니다.
+              No note was saved with this feedback.
             </p>
           )}
         </div>
@@ -1554,17 +1573,17 @@ function SessionFeedback({
         </div>
 
         <label className="block">
-          <span className="text-sm font-semibold">메모 남기기</span>
+          <span className="text-sm font-semibold">Leave a note</span>
           <textarea
             value={note}
             maxLength={500}
             disabled={isSubmitting}
             onChange={(event) => setNote(event.target.value)}
-            placeholder="어떤 점이 도움이 되었는지, 또는 어디가 아쉬웠는지 간단히 적어 주세요."
+            placeholder="Briefly note what helped or what felt off."
             className="mt-2 min-h-28 w-full rounded-[1.5rem] border border-[color:var(--border)] bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-[color:var(--accent)]"
           />
           <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
-            {note.length}/500자
+            {note.length}/500 characters
           </p>
         </label>
 
@@ -1580,14 +1599,14 @@ function SessionFeedback({
           >
             {isSubmitting
               ? savedFeedback
-                ? "피드백 업데이트 중..."
-                : "피드백 저장 중..."
+                ? "Updating feedback..."
+                : "Saving feedback..."
               : savedFeedback
-                ? "피드백 수정"
-                : "피드백 저장"}
+                ? "Update feedback"
+                : "Save feedback"}
           </button>
           <p className="text-sm text-[color:var(--muted-foreground)]">
-            새로고침하면 가장 최근에 저장한 피드백 상태가 반영됩니다.
+            Refreshing will show the latest saved feedback state.
           </p>
         </div>
       </form>
@@ -1641,9 +1660,9 @@ export function SessionView({ initialSnapshot }: { initialSnapshot: SessionSnaps
 
       {!isTerminal ? (
         <div className="rounded-[2rem] border border-[color:var(--border)] bg-[color:var(--panel)] p-6">
-          <h2 className="text-lg font-semibold">아직 결과를 만드는 중입니다</h2>
+          <h2 className="text-lg font-semibold">The result is still being generated</h2>
           <p className="mt-2 max-w-2xl text-sm leading-7 text-[color:var(--muted-foreground)]">
-            대기, 읽기, 프로필 정리, 추천 생성 단계를 지나면서 이 화면이 자동으로 갱신됩니다. 로컬 개발에서는 `npm run dev`와 `npm run worker:dev`가 모두 필요합니다.
+            This page refreshes automatically while the session moves through queueing, parsing, profiling, and recommendation generation. In local development, both `npm run dev` and `npm run worker:dev` must be running.
           </p>
         </div>
       ) : null}
@@ -1665,19 +1684,19 @@ export function SessionView({ initialSnapshot }: { initialSnapshot: SessionSnaps
           href="/sessions"
           className="rounded-full border border-[color:var(--border)] px-4 py-2 transition hover:bg-white/70"
         >
-          최근 결과 보기
+          View recent results
         </Link>
         <Link
-          href="/"
+          href="/start"
           className="rounded-full border border-[color:var(--border)] px-4 py-2 transition hover:bg-white/70"
         >
-          새 이력서로 시작
+          Start with a new resume
         </Link>
         <a
           href="/api/health"
           className="rounded-full border border-[color:var(--border)] px-4 py-2 transition hover:bg-white/70"
         >
-          시스템 상태 보기
+          Check system health
         </a>
       </div>
     </div>

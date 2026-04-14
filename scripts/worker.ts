@@ -22,6 +22,7 @@ import {
   buildFileUploadAnalysisInput,
   ResumeParseFailure,
 } from "@/lib/resume-intake";
+import { ModelRecommendationError } from "@/lib/model-backed-recommendations";
 import { buildParserFailureResult } from "@/lib/rule-engine";
 import { downloadResumeObject } from "@/lib/storage";
 
@@ -175,7 +176,10 @@ const worker = new Worker(
       await markAnalysisRunFailed({
         analysisSessionId,
         analysisRunId,
-        errorCode: "worker_processing_failed",
+        errorCode:
+          error instanceof ModelRecommendationError
+            ? error.errorCode
+            : "worker_processing_failed",
         errorMessage:
           error instanceof Error ? error.message : "Unknown worker failure",
       });

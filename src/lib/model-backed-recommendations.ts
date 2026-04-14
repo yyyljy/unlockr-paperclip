@@ -46,16 +46,6 @@ type ModelBackedRecommendationAdapter = {
   }) => Promise<unknown>;
 };
 
-type FallbackPathContext = {
-  status: "fallback_timeout" | "fallback_error";
-  attemptedProvider: string | null;
-};
-
-type ModelBackedRecommendationOutcome = {
-  result: AnalysisResult | null;
-  fallbackPathContext: FallbackPathContext | null;
-};
-
 type EvidenceOption = {
   key: string;
   signalLabel: string;
@@ -89,6 +79,30 @@ const maxContractRisks = 3;
 const maxContractBlockingFindings = 4;
 const maxContractPartialSignals = 4;
 const maxContractFollowUpQuestions = 5;
+
+type ModelRecommendationFailureCode =
+  | "model_provider_not_configured"
+  | "model_recommendation_failed"
+  | "model_recommendation_timed_out";
+
+type ModelAdapterFailure = {
+  provider: string;
+  reason: string;
+  timedOut: boolean;
+};
+
+export class ModelRecommendationError extends Error {
+  readonly errorCode: ModelRecommendationFailureCode;
+
+  constructor(input: {
+    errorCode: ModelRecommendationFailureCode;
+    message: string;
+  }) {
+    super(input.message);
+    this.name = "ModelRecommendationError";
+    this.errorCode = input.errorCode;
+  }
+}
 
 const readyModelOutputSchema = z.object({
   status: z.literal("ready"),
@@ -252,19 +266,43 @@ function collectEvidenceCatalog(profile: CandidateProfile) {
   return catalog;
 }
 
-function hasEnoughSignalForModelAttempt(input: {
-  analysisInput: NormalizedAnalysisInput;
-  profile: CandidateProfile;
-  evidenceCatalog: EvidenceOption[];
-}) {
-  const trimmedText = input.analysisInput.document.normalizedText.trim();
+function providerLabel(provider: string) {
+  switch (provider) {
+    case "codex-local":
+      return "Codex local";
+    case "openai":
+      return "OpenAI";
+    default:
+      return provider;
+  }
+}
 
-  return (
-    input.evidenceCatalog.length >= 2 &&
-    (trimmedText.length >= 160 ||
-      input.profile.roleSignals.length > 0 ||
-      input.profile.skills.length >= 2)
-  );
+function summarizeAdapterFailure(error: unknown) {
+  if (!(error instanceof Error)) {
+    return "Unknown recommendation error.";
+  }
+
+  return error.message.replace(/\s+/g, " ").trim().slice(0, 240);
+}
+
+function buildModelFailureMessage(failures: ModelAdapterFailure[]) {
+  const attemptedProviders = failures.map((failure) => providerLabel(failure.provider)).join(", ");
+  const primaryFailure =
+    failures.find((failure) => failure.timedOut) ?? failures[failures.length - 1];
+
+  if (!primaryFailure) {
+    return "AI recommendation failed before a result could be created.";
+  }
+
+  if (primaryFailure.timedOut) {
+    return `AI recommendation timed out after trying ${attemptedProviders}. ${providerLabel(
+      primaryFailure.provider,
+    )} did not finish within the allowed time.`;
+  }
+
+  return `AI recommendation failed after trying ${attemptedProviders}. ${summarizeAdapterFailure(
+    primaryFailure.reason,
+  )}`;
 }
 
 function buildSystemPrompt() {
@@ -783,34 +821,20 @@ function buildRecommendationAdapters(env: ServerEnv): ModelBackedRecommendationA
 export async function analyzeResumeInputWithModel(input: {
   analysisInput: NormalizedAnalysisInput;
   profile: CandidateProfile;
-}): Promise<ModelBackedRecommendationOutcome> {
+}): Promise<AnalysisResult> {
   const env = getServerEnv();
   const adapters = buildRecommendationAdapters(env);
 
   if (adapters.length === 0) {
-    return {
-      result: null,
-      fallbackPathContext: null,
-    };
+    throw new ModelRecommendationError({
+      errorCode: "model_provider_not_configured",
+      message:
+        "AI recommendation is not configured. Add an OpenAI recommendation model or enable codex-local before running a new analysis.",
+    });
   }
 
   const evidenceCatalog = collectEvidenceCatalog(input.profile);
-
-  if (
-    !hasEnoughSignalForModelAttempt({
-      analysisInput: input.analysisInput,
-      profile: input.profile,
-      evidenceCatalog,
-    })
-  ) {
-    return {
-      result: null,
-      fallbackPathContext: null,
-    };
-  }
-
-  let fallbackPathContext: FallbackPathContext | null = null;
-  let timeoutFallbackContext: FallbackPathContext | null = null;
+  const failures: ModelAdapterFailure[] = [];
 
   for (const [index, adapter] of adapters.entries()) {
     try {
@@ -822,58 +846,45 @@ export async function analyzeResumeInputWithModel(input: {
       const parsedOutput = normalizeParsedModelOutput(modelOutputSchema.parse(rawOutput));
 
       if (parsedOutput.status === "ready") {
-        return {
-          result: buildReadyResultFromModel({
-            output: parsedOutput,
-            analysisInput: input.analysisInput,
-            evidenceCatalog,
-            modelIdentity: adapter.identity,
-            env,
-          }),
-          fallbackPathContext: null,
-        };
-      }
-
-      return {
-        result: buildInsufficientEvidenceResultFromModel({
+        return buildReadyResultFromModel({
           output: parsedOutput,
           analysisInput: input.analysisInput,
+          evidenceCatalog,
           modelIdentity: adapter.identity,
           env,
-        }),
-        fallbackPathContext: null,
-      };
-    } catch (error) {
-      const currentFallbackPathContext = {
-        status:
-          error instanceof Error && /timed out/i.test(error.message)
-            ? "fallback_timeout"
-            : "fallback_error",
-        attemptedProvider: adapter.identity.provider,
-      } satisfies FallbackPathContext;
-
-      fallbackPathContext = currentFallbackPathContext;
-
-      if (currentFallbackPathContext.status === "fallback_timeout") {
-        timeoutFallbackContext = currentFallbackPathContext;
+        });
       }
 
-      const fallbackMessage =
-        index === adapters.length - 1
-          ? "using fallback rules engine instead."
-          : "trying the next adapter.";
+      return buildInsufficientEvidenceResultFromModel({
+        output: parsedOutput,
+        analysisInput: input.analysisInput,
+        modelIdentity: adapter.identity,
+        env,
+      });
+    } catch (error) {
+      const timedOut = error instanceof Error && /timed out/i.test(error.message);
+      failures.push({
+        provider: adapter.identity.provider,
+        reason: summarizeAdapterFailure(error),
+        timedOut,
+      });
+
+      const nextStepMessage =
+        index === adapters.length - 1 ? "no more adapters remain." : "trying the next adapter.";
 
       console.warn(
-        `${adapter.identity.provider} recommendation adapter failed; ${fallbackMessage}`,
+        `${adapter.identity.provider} recommendation adapter failed; ${nextStepMessage}`,
         error,
       );
     }
   }
 
-  return {
-    result: null,
-    fallbackPathContext: timeoutFallbackContext ?? fallbackPathContext,
-  };
+  throw new ModelRecommendationError({
+    errorCode: failures.some((failure) => failure.timedOut)
+      ? "model_recommendation_timed_out"
+      : "model_recommendation_failed",
+    message: buildModelFailureMessage(failures),
+  });
 }
 
 

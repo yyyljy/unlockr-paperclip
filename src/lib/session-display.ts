@@ -6,12 +6,12 @@ type SessionSourceType = SessionSnapshot["session"]["sourceType"];
 
 export function formatSessionDate(value: Date | string | null) {
   if (!value) {
-    return "아직 완료되지 않았습니다";
+    return "Not completed yet";
   }
 
   const date = typeof value === "string" ? new Date(value) : value;
 
-  return new Intl.DateTimeFormat("ko-KR", {
+  return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);
@@ -19,13 +19,13 @@ export function formatSessionDate(value: Date | string | null) {
 
 export function formatSessionDuration(value: number | null) {
   if (value === null) {
-    return "아직 완료되지 않았습니다";
+    return "Not completed yet";
   }
 
   const totalSeconds = Math.max(0, Math.round(value / 1000));
 
   if (totalSeconds < 60) {
-    return `${totalSeconds}초`;
+    return `${totalSeconds}s`;
   }
 
   const totalMinutes = Math.floor(totalSeconds / 60);
@@ -33,51 +33,51 @@ export function formatSessionDuration(value: number | null) {
 
   if (totalMinutes < 60) {
     return remainingSeconds === 0
-      ? `${totalMinutes}분`
-      : `${totalMinutes}분 ${remainingSeconds}초`;
+      ? `${totalMinutes}m`
+      : `${totalMinutes}m ${remainingSeconds}s`;
   }
 
   const totalHours = Math.floor(totalMinutes / 60);
   const remainingMinutes = totalMinutes % 60;
 
   return remainingMinutes === 0
-    ? `${totalHours}시간`
-    : `${totalHours}시간 ${remainingMinutes}분`;
+    ? `${totalHours}h`
+    : `${totalHours}h ${remainingMinutes}m`;
 }
 
 export function sessionStatusLabel(status: SessionStatus) {
   switch (status) {
     case "queued":
-      return "대기 중";
+      return "Queued";
     case "parsing":
-      return "읽는 중";
+      return "Parsing";
     case "analyzing":
-      return "분석 중";
+      return "Analyzing";
     case "ready":
-      return "결과 준비 완료";
+      return "Ready";
     case "insufficient_evidence":
-      return "정보 보완 필요";
+      return "Needs More Detail";
     case "parser_failure":
-      return "파일 읽기 실패";
+      return "Parser Failure";
     case "failed":
-      return "처리 실패";
+      return "Failed";
   }
 }
 
 export function feedbackSentimentLabel(sentiment: FeedbackSentiment) {
   switch (sentiment) {
     case "helpful":
-      return "도움 되었음";
+      return "Helpful";
     case "not_helpful":
-      return "도움이 부족했음";
+      return "Not Helpful";
   }
 }
 
 export function sessionSourceLabel(sourceType: SessionSourceType) {
   switch (sourceType) {
     case "pasted_text":
-      return "텍스트 붙여넣기";
+      return "Pasted Text";
     case "file_upload":
-      return "파일 업로드";
+      return "File Upload";
   }
 }

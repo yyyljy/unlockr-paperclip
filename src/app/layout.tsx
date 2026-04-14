@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, Noto_Sans_KR } from "next/font/google";
+import { IBM_Plex_Mono, Noto_Sans } from "next/font/google";
 import "./globals.css";
 
-const notoSansKr = Noto_Sans_KR({
-  variable: "--font-noto-sans-kr",
+const notoSans = Noto_Sans({
+  variable: "--font-noto-sans",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
 });
@@ -15,9 +15,9 @@ const ibmPlexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Unlockr | 이력서 기반 커리어 방향 찾기",
+  title: "Unlockr | Find Your Next Career Direction from Your Resume",
   description:
-    "이력서와 자기소개를 바탕으로 현실적인 커리어 방향, 근거, 부족한 정보, 다음 행동까지 정리해 주는 Unlockr.",
+    "Unlockr reads your resume or personal profile, surfaces realistic next-role directions, shows the evidence, flags what is missing, and suggests the next action.",
 };
 
 export default function RootLayout({
@@ -27,8 +27,8 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="ko"
-      className={`${notoSansKr.variable} ${ibmPlexMono.variable} h-full antialiased`}
+      lang="en"
+      className={`${notoSans.variable} ${ibmPlexMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

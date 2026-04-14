@@ -21,7 +21,7 @@ const intakeFormSchema = z
       context.addIssue({
         code: "custom",
         path: ["resumeText"],
-        message: "이력서나 자기소개 텍스트를 붙여 넣어 주세요.",
+        message: "Paste your resume or profile text.",
       });
     }
 
@@ -29,31 +29,12 @@ const intakeFormSchema = z
       context.addIssue({
         code: "custom",
         path: ["resumeFile"],
-        message: "PDF, DOCX, TXT 파일을 선택해 주세요.",
+        message: "Choose a PDF, DOCX, or TXT file.",
       });
     }
   });
 
 type IntakeFormValues = z.infer<typeof intakeFormSchema>;
-
-const orientationItems = [
-  {
-    label: "예상 소요 시간",
-    value: "첫 결과는 보통 1분 안팎으로 도착합니다",
-  },
-  {
-    label: "가능한 입력",
-    value: "이력서 텍스트, PDF, DOCX, TXT",
-  },
-  {
-    label: "정확도가 높아지는 정보",
-    value: "담당 업무, 사용 도구, 산업 맥락, 수치 성과",
-  },
-  {
-    label: "정보가 부족할 때",
-    value: "억지 추천 대신 보완 질문을 먼저 드립니다",
-  },
-] as const;
 
 export function IntakeForm() {
   const router = useRouter();
@@ -80,25 +61,25 @@ export function IntakeForm() {
   const sourceOptions = [
     {
       value: "pasted_text" as const,
-      title: "텍스트 붙여넣기",
-      description: "가장 빠르게 결과를 확인할 수 있습니다",
-      helper: "복사한 이력서나 자기소개 텍스트를 바로 분석합니다.",
-      submitLabel: "텍스트로 분석 시작하기",
-      ctaHelper: "붙여넣은 텍스트 기준으로 첫 결과 화면으로 이동합니다.",
-      badge: "fastest path",
-      inputLabel: "이력서 또는 자기소개 텍스트",
+      title: "Paste text",
+      description: "Fastest review path",
+      helper: "Best when you already have clean, editable text.",
+      submitLabel: "Start with text",
+      ctaHelper: "You will move directly into the live result view.",
+      badge: "fastest",
+      inputLabel: "Resume or profile text",
       placeholder:
-        "담당 업무, 프로젝트, 사용 도구, 산업 맥락, 성과 수치가 드러나게 붙여 넣어 주세요.",
+        "Paste a version that makes your responsibilities, projects, tools, domain context, and measurable outcomes clear.",
     },
     {
       value: "file_upload" as const,
-      title: "파일 업로드",
-      description: "원본 이력서 기준으로 검토할 수 있습니다",
-      helper: "PDF, DOCX, TXT 파일에서 텍스트를 추출해 같은 흐름으로 분석합니다.",
-      submitLabel: "파일로 분석 시작하기",
-      ctaHelper: "원본 파일을 바탕으로 같은 결과 화면으로 이어집니다.",
-      badge: "original file",
-      inputLabel: "이력서 파일",
+      title: "Upload file",
+      description: "Use the original document",
+      helper: "Best when you want to analyze the submitted file directly.",
+      submitLabel: "Start with a file",
+      ctaHelper: "You will continue into the same result view with the uploaded file.",
+      badge: "document",
+      inputLabel: "Resume file",
       placeholder: "",
     },
   ];
@@ -138,7 +119,7 @@ export function IntakeForm() {
 
     if (!response.ok || !payload?.sessionId) {
       setApiError(
-        payload?.message ?? "분석 요청을 시작하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+        payload?.message ?? "Could not start the analysis request. Please try again in a moment.",
       );
       return;
     }
@@ -149,39 +130,27 @@ export function IntakeForm() {
   });
 
   return (
-    <form id="resume-intake" onSubmit={onSubmit} className="space-y-6 text-[#f4eee2]">
+    <form id="resume-intake" onSubmit={onSubmit} className="space-y-5 text-[#f4eee2]">
       <div className="space-y-3">
         <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-white/44">
-          Start here
+          Analysis input
         </p>
         <div>
-          <h2 className="text-[1.9rem] font-semibold leading-[1.05] tracking-[-0.04em] text-white">
-            Unlockr가 읽을 이력서를 보내주세요
+          <h2 className="text-[1.65rem] font-semibold leading-[1.05] tracking-[-0.04em] text-white">
+            Start a new resume analysis
           </h2>
           <p className="mt-3 max-w-lg text-sm leading-7 text-white/64">
-            지금 가지고 있는 형태를 그대로 보내면 됩니다. 부족한 정보는 결과
-            단계에서 다시 보완할 수 있습니다.
+            Choose pasted text or an upload. Stronger results usually come from clear scope, tools, context, and measurable outcomes.
           </p>
         </div>
       </div>
-
-      <section className="grid gap-4 rounded-[1.8rem] border border-white/10 bg-white/[0.03] p-5 sm:grid-cols-2">
-        {orientationItems.map((item) => (
-          <div key={item.label} className="border-t border-white/10 pt-3">
-            <p className="font-mono text-[11px] uppercase tracking-[0.26em] text-white/40">
-              {item.label}
-            </p>
-            <p className="mt-3 text-sm leading-7 text-white/78">{item.value}</p>
-          </div>
-        ))}
-      </section>
 
       <section className="rounded-[1.8rem] border border-white/10 bg-black/12 p-5">
         <div>
           <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-white/40">
             Step 1
           </p>
-          <h3 className="mt-3 text-lg font-semibold text-white">어떤 형태로 보낼까요</h3>
+          <h3 className="mt-3 text-lg font-semibold text-white">Choose an input mode</h3>
         </div>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -270,7 +239,7 @@ export function IntakeForm() {
                 {...register("resumeFile")}
               />
               <span className="text-sm leading-6 text-white/54">
-                PDF, DOCX, TXT 형식을 지원합니다. 1단계 업로드 한도는 8MB입니다.
+                PDF, DOCX, and TXT are supported. The upload limit is 8MB.
               </span>
               {errors.resumeFile ? (
                 <span className="text-sm text-[#ffb0a0]">
@@ -287,13 +256,13 @@ export function IntakeForm() {
           Optional
         </p>
         <label className="mt-3 block space-y-2">
-          <span className="text-sm font-medium text-white/86">이름 또는 메모 남기기</span>
+          <span className="text-sm font-medium text-white/86">Label this draft</span>
           <p className="text-sm leading-6 text-white/56">
-            결과 화면에서 여러 초안을 구분하고 싶을 때만 적어 주세요.
+            Useful when you want to distinguish multiple versions in the results list.
           </p>
           <input
             type="text"
-            placeholder="예: PM 경력 전환 초안"
+            placeholder="Example: PM transition draft"
             className="w-full rounded-[1.4rem] border border-white/10 bg-white/[0.05] px-4 py-3 text-white outline-none transition placeholder:text-white/28 focus:border-[color:var(--accent)]"
             {...register("candidateLabel")}
           />
@@ -315,9 +284,9 @@ export function IntakeForm() {
           disabled={isPending}
           className="inline-flex min-h-14 items-center justify-center rounded-full bg-[color:var(--accent)] px-6 text-sm font-semibold text-white transition hover:opacity-92 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isPending ? "결과 화면 여는 중..." : activeSourceOption.submitLabel}
+          {isPending ? "Opening results..." : activeSourceOption.submitLabel}
         </button>
-        <p className="max-w-xs text-sm leading-6 text-white/56">{activeSourceOption.ctaHelper}</p>
+        <p className="max-w-sm text-sm leading-6 text-white/56">{activeSourceOption.ctaHelper}</p>
       </div>
     </form>
   );

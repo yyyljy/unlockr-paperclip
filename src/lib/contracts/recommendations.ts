@@ -125,7 +125,11 @@ export const sampleAnalysisResult = analysisResultSchema.parse({
     contractVersion: "v1",
     taxonomyVersion: "2026-04-02",
     generatedAt: "2026-04-02T02:00:00.000Z",
-    recommendationPath: "fallback",
+    recommendationPath: "model_backed",
+    pathContext: {
+      status: "accepted_model",
+      attemptedProvider: "openai",
+    },
     parser: {
       provider: "unlockr.direct-text-intake",
       version: "phase1-intake-v1",
@@ -133,9 +137,9 @@ export const sampleAnalysisResult = analysisResultSchema.parse({
       extractedAt: "2026-04-02T02:00:00.000Z",
     },
     model: {
-      provider: "unlockr-rules",
-      version: "rules-2026-04-02",
-      promptVersion: "phase1-rules-seed",
+      provider: "openai",
+      version: "gpt-5.4-mini",
+      promptVersion: "phase2-openai-v1",
     },
   },
   summary: {

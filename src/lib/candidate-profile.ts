@@ -42,19 +42,19 @@ type SentenceFragment = ReturnType<typeof extractSentenceFragments>[number];
 const candidateProfileVersion = "phase2-profile-v1";
 
 const roleHistoryPattern =
-  /\b(engineer|developer|manager|analyst|designer|operator|operations|specialist|coordinator|consultant|researcher|marketer|intern|lead|founder|개발자|엔지니어|디자이너|운영|분석|매니저|리드)\b/i;
+  /\b(engineer|developer|manager|analyst|designer|operator|operations|specialist|coordinator|consultant|researcher|marketer|intern|lead|founder|\uAC1C\uBC1C\uC790|\uC5D4\uC9C0\uB2C8\uC5B4|\uB514\uC790\uC774\uB108|\uC6B4\uC601|\uBD84\uC11D|\uB9E4\uB2C8\uC800|\uB9AC\uB4DC)\b/i;
 
 const educationPattern =
-  /\b(university|college|bachelor|master|phd|degree|major|bootcamp|academy|교육|학사|석사|박사|학위|전공)\b/i;
+  /\b(university|college|bachelor|master|phd|degree|major|bootcamp|academy|\uAD50\uC721|\uD559\uC0AC|\uC11D\uC0AC|\uBC15\uC0AC|\uD559\uC704|\uC804\uACF5)\b/i;
 
 const certificationPattern =
-  /\b(certification|certificate|license|licensed|award|credential|자격증|수상|인증)\b/i;
+  /\b(certification|certificate|license|licensed|award|credential|\uC790\uACA9\uC99D|\uC218\uC0C1|\uC778\uC99D)\b/i;
 
 const achievementVerbPattern =
   /\b(improved|reduced|increased|grew|scaled|launched|shipped|delivered|saved|automated|cut|boosted|won|led|built|implemented|optimized|streamlined|migrated|achieved)\b/i;
 
 const achievementMetricPattern =
-  /\b\d+(?:[.,]\d+)?\s?(?:%|x|배|명|건|회|시간|분|초|일|주|개월|달|년|users?|customers?|hours?|days?|weeks?|months?)\b/i;
+  /\b\d+(?:[.,]\d+)?\s?(?:%|x|\uBC30|\uBA85|\uAC74|\uD68C|\uC2DC\uAC04|\uBD84|\uCD08|\uC77C|\uC8FC|\uAC1C\uC6D4|\uB2EC|\uB144|users?|customers?|hours?|days?|weeks?|months?)\b/i;
 
 const skillVocabulary = [
   "react",
@@ -99,7 +99,7 @@ function truncate(value: string, max = 140) {
 function buildKey(prefix: string, value: string, index: number) {
   const slug = value
     .toLowerCase()
-    .replace(/[^a-z0-9가-힣]+/g, "-")
+    .replace(/[^\p{Script=Hangul}a-z0-9]+/gu, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 48);
 

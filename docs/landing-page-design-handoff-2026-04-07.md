@@ -106,25 +106,25 @@ Required content:
 - lightweight role-family chips
 - three trust cues
 
-Recommended Korean copy:
+Recommended copy:
 
-- Eyebrow: `이력서 기반 커리어 방향 찾기`
-- Headline: `내 경험으로 현실적인 다음 커리어 방향을 찾으세요`
-- Supporting copy: `이력서나 자기소개를 올리면 Unlockr가 맞을 가능성이 높은 직무 방향, 그 근거, 아직 부족한 정보, 바로 할 다음 행동까지 정리해 드립니다.`
+- Eyebrow: `Find Your Next Career Direction from Your Resume`
+- Headline: `Find a realistic next career direction from the experience you already have`
+- Supporting copy: `Upload a resume or profile and Unlockr will organize the most likely role directions, the evidence behind them, what is still missing, and the next action to take.`
 
 Role-family chips:
 
-- 프로덕트
-- 운영
-- 고객성공
-- 데이터
-- 디자인
+- Product
+- Operations
+- Customer Success
+- Data
+- Design
 
 Trust cues:
 
-- `근거가 있는 방향만 보여줍니다`
-- `정보가 부족하면 추측 대신 추가 질문을 합니다`
-- `다음 행동까지 바로 이어집니다`
+- `Only directions with support are shown`
+- `If the input is thin, the product asks follow-up questions instead of guessing`
+- `The result should lead directly into a next action`
 
 CTA guidance:
 
@@ -133,8 +133,8 @@ CTA guidance:
 
 Recommended CTA labels:
 
-- Primary: `내 이력서로 시작하기`
-- Secondary: `최근 결과 보기`
+- Primary: `Start with My Resume`
+- Secondary: `View Recent Results`
 
 ### 2. Orientation Band
 
@@ -148,10 +148,10 @@ Purpose:
 
 Content blocks:
 
-- `예상 소요 시간`: `첫 결과는 보통 1분 안팎으로 도착합니다`
-- `가능한 입력`: `이력서 텍스트, PDF, DOCX, TXT`
-- `정확도가 높아지는 정보`: `담당 업무, 사용 도구, 산업 맥락, 수치 성과`
-- `정보가 부족할 때`: `억지 추천 대신 보완 질문을 먼저 드립니다`
+- `Estimated time`: `Most first-pass results arrive in about a minute`
+- `Accepted input`: `Resume text, PDF, DOCX, TXT`
+- `What improves accuracy`: `Scope of work, tools used, industry context, measurable outcomes`
+- `If details are thin`: `Show follow-up questions before forcing a recommendation`
 
 ### 3. Sample Result Preview
 
@@ -167,24 +167,24 @@ This section should visually show the output mental model:
 
 Recommended structure:
 
-- top badge: `예시 결과`
-- lead card title: `가장 가능성 높은 방향`
+- top badge: `Sample Result`
+- lead card title: `Most Likely Direction`
 - primary path card
 - two smaller alternate path cards
 - short evidence and next-step treatment inside the main card
 
 Recommended example content:
 
-- Top direction: `운영 중심 프로덕트 매니저`
-- Why this fits: `프로세스 설계, 부서 간 조율, 운영 지표 관리 경험이 반복적으로 드러납니다.`
-- Evidence strength label: `근거 강도 높음`
-- Still unclear: `제품 전략 우선순위 결정 경험은 추가 확인이 필요합니다.`
-- Next step: `최근 2개 프로젝트에서 의사결정 책임 범위를 한 줄씩 보강하세요.`
+- Top direction: `Operations-Focused Product Manager`
+- Why this fits: `The resume repeatedly shows process design, cross-functional alignment, and operating metric ownership.`
+- Evidence strength label: `Strong Evidence`
+- Still unclear: `Product strategy prioritization still needs more explicit confirmation.`
+- Next step: `Add one line to the last two projects clarifying decision-making ownership.`
 
 Alternate cards:
 
-- `고객성공 운영`
-- `서비스 운영 기획`
+- `Customer Success Operations`
+- `Service Operations Planning`
 
 ### 4. Trust Section
 
@@ -192,9 +192,9 @@ Keep trust proof on the page, but simplify it into three short cards with strong
 
 Recommended headings:
 
-- `왜 이 방향을 추천했는지 보여줍니다`
-- `확실하지 않은 부분은 따로 표시합니다`
-- `다음 행동까지 바로 연결합니다`
+- `Show why this direction was recommended`
+- `Keep uncertain areas visible`
+- `Connect the result directly to the next action`
 
 This section should sit below the hero if the sample result preview is integrated into the hero zone, or directly beside it if the layout supports it.
 
@@ -211,18 +211,18 @@ Change only:
 
 Recommended header copy:
 
-- Eyebrow: `시작하기`
-- Title: `Unlockr가 읽을 이력서를 보내주세요`
-- Body: `지금 가지고 있는 형태를 그대로 선택하면 됩니다. 부족한 정보는 결과 단계에서 다시 보완할 수 있습니다.`
+- Eyebrow: `Start Here`
+- Title: `Send the resume you want Unlockr to read`
+- Body: `Use whatever version you already have. Missing detail can be added later from the result screen.`
 
 Source option copy:
 
-- `텍스트 붙여넣기`
-  - Benefit: `가장 빠르게 결과를 확인할 수 있습니다`
-  - Support: `복사한 이력서나 자기소개 텍스트를 바로 분석합니다`
-- `파일 업로드`
-  - Benefit: `원본 이력서 기준으로 검토할 수 있습니다`
-  - Support: `PDF, DOCX, TXT 파일에서 텍스트를 추출해 같은 흐름으로 분석합니다`
+- `Paste text`
+  - Benefit: `The fastest way to see a result`
+  - Support: `Analyze copied resume or profile text right away`
+- `Upload file`
+  - Benefit: `Review the original resume file`
+  - Support: `Extract text from PDF, DOCX, and TXT and analyze it through the same flow`
 
 Reduce or remove language that asks the user to understand the system pipeline.
 

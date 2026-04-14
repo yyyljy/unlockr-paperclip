@@ -31,7 +31,7 @@ export const roleTracks: RoleTrack[] = [
       "typescript",
       "css",
       "design system",
-      "웹",
+      "\uC6F9",
     ],
     nextSteps: [
       {
@@ -109,7 +109,7 @@ export const roleTracks: RoleTrack[] = [
       "retention",
       "cross-functional",
       "coordination",
-      "기획",
+      "\uAE30\uD68D",
     ],
     nextSteps: [
       {
@@ -149,7 +149,7 @@ export const roleTracks: RoleTrack[] = [
       "cohort",
       "metric",
       "data",
-      "데이터",
+      "\uB370\uC774\uD130",
     ],
     nextSteps: [
       {
