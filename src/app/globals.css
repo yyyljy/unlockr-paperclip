@@ -45,3 +45,182 @@ a {
   color: inherit;
   text-decoration: none;
 }
+
+@keyframes landingRise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 26px, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes landingFloat {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  50% {
+    transform: translate3d(0, -18px, 0) scale(1.04);
+  }
+}
+
+@keyframes landingMarquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.landing-page {
+  position: relative;
+}
+
+.landing-hero {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(204, 120, 84, 0.22), transparent 24%),
+    radial-gradient(circle at 80% 24%, rgba(255, 255, 255, 0.08), transparent 24%),
+    linear-gradient(180deg, #11181c 0%, #0f1518 46%, #0b1013 100%);
+  color: #f4eee2;
+  isolation: isolate;
+}
+
+.landing-hero::before {
+  position: absolute;
+  inset: auto auto 8% -10%;
+  width: 38rem;
+  height: 38rem;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(240, 150, 112, 0.16), transparent 66%);
+  content: "";
+  filter: blur(14px);
+  opacity: 0.88;
+}
+
+.landing-hero::after {
+  position: absolute;
+  inset: 12% -8% auto auto;
+  width: 24rem;
+  height: 24rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  content: "";
+  opacity: 0.9;
+}
+
+.landing-grid-overlay {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.055) 1px, transparent 1px);
+  background-size: 120px 120px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.68), transparent 92%);
+  opacity: 0.22;
+  pointer-events: none;
+}
+
+.landing-hero-glow {
+  position: absolute;
+  right: 18%;
+  top: 16%;
+  width: 22rem;
+  height: 22rem;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.12), transparent 62%);
+  filter: blur(10px);
+  animation: landingFloat 9s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.landing-form-shell {
+  position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04));
+  padding: 1.15rem;
+  box-shadow: 0 32px 90px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(20px);
+}
+
+.landing-form-shell::before {
+  position: absolute;
+  inset: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+  content: "";
+}
+
+.landing-marquee {
+  overflow: hidden;
+}
+
+.landing-marquee-track {
+  display: flex;
+  gap: 3rem;
+  width: max-content;
+  min-width: 200%;
+  animation: landingMarquee 24s linear infinite;
+}
+
+.landing-rise {
+  opacity: 0;
+  animation: landingRise 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+.landing-delay-1 {
+  animation-delay: 0.08s;
+}
+
+.landing-delay-2 {
+  animation-delay: 0.18s;
+}
+
+.landing-delay-3 {
+  animation-delay: 0.28s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-hero-glow,
+  .landing-marquee-track,
+  .landing-rise {
+    animation: none;
+  }
+
+  .landing-rise {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 767px) {
+  .landing-hero::before {
+    width: 24rem;
+    height: 24rem;
+    inset: auto auto 12% -25%;
+  }
+
+  .landing-hero::after {
+    width: 15rem;
+    height: 15rem;
+    inset: 18% -22% auto auto;
+  }
+
+  .landing-hero-glow {
+    right: -18%;
+    top: 12%;
+    width: 15rem;
+    height: 15rem;
+  }
+
+  .landing-form-shell {
+    padding: 0.9rem;
+  }
+}
